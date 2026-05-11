@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import pathlib
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .routes import control, ws
 from .serial_link import serial_link
+
+FRONTEND_DIR = pathlib.Path(__file__).parent.parent.parent  # backend/app/ → backend/ → Motorinador/
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,3 +55,6 @@ async def healthz() -> dict:
 
 app.include_router(control.router)
 app.include_router(ws.router)
+
+# Sirve el frontend estático — debe ir AL FINAL para no interceptar las rutas de la API
+app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

@@ -788,7 +788,7 @@ function escapeHtml(s) {
 function fmt(n, d=1) { return n.toFixed(d); }
 
 /* ===== WebSocket connection ===== */
-const WS_URL = 'ws://localhost:8000/ws';
+const WS_URL = `ws://${window.location.host}/ws`;
 let ws = null;
 
 function wsConnect() {
