@@ -100,7 +100,7 @@ class SerialLink:
         if frame:
             frame = _enrich(frame, motor_state.params)
             motor_state.last_status = frame
-            self._last_target = frame.target_rpm
+            self._last_target = frame.target_rpm   # siempre en sync con el firmware
             await motor_state.broadcast(WsStatus(data=frame))
         else:
             level = "warn" if "error" in line.lower() else "info"
@@ -118,13 +118,17 @@ class SerialLink:
             await self._writer.drain()
 
     async def set_target_rpm(self, target: float) -> None:
-        target = max(motor_state.params.rpm_min, min(motor_state.params.rpm_max, target))
-        steps = round((target - self._last_target) / motor_state.params.rpm_step)
+        params = motor_state.params
+        step = params.rpm_step if params.rpm_step > 0 else 5.0
+        target = max(params.rpm_min, min(params.rpm_max, target))
+        steps = round((target - self._last_target) / step)
+        if steps == 0:
+            return
         cmd = "+" if steps > 0 else "-"
         for _ in range(abs(steps)):
             await self.send(cmd)
             await asyncio.sleep(0.02)
-        self._last_target = self._last_target + steps * motor_state.params.rpm_step
+        self._last_target = self._last_target + steps * step
 
     def schedule_set_target(self, target: float) -> None:
         self._pending_target = target
@@ -149,17 +153,20 @@ class SerialLink:
 
     async def cmd_start(self) -> None:
         status = motor_state.last_status
-        if status and not status.running:
+        # Si no hay status aún, asume parado y envía toggle
+        if status is None or not status.running:
             await self.send("s")
 
     async def cmd_stop(self) -> None:
         status = motor_state.last_status
-        if status and status.running:
+        # Si no hay status aún, asume corriendo y envía toggle
+        if status is None or status.running:
             await self.send("s")
 
     async def cmd_e_stop(self) -> None:
+        # E-STOP es sagrado: para siempre, sin importar el estado conocido
         status = motor_state.last_status
-        if status and status.running:
+        if status is None or status.running:
             await self.send("s")
 
     async def cmd_reverse(self) -> None:

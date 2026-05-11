@@ -797,13 +797,15 @@ function wsConnect() {
   ws.onopen = () => {
     state.wsConnected = true;
     document.getElementById('liveDot').textContent = 'CONECTADO';
-    ledPower.classList.add('on');
     logRaw('<span class="ok">WS</span> Backend conectado');
   };
 
   ws.onclose = () => {
     state.wsConnected = false;
     ledPower.classList.remove('on');
+    ledEnc.classList.remove('on');
+    state.realRPM = 0;
+    applyRunningState(false);
     document.getElementById('liveDot').textContent = 'DESCONECTADO';
     logRaw('<span class="err">WS</span> Backend desconectado — reintentando en 3 s...', 'err');
     setTimeout(wsConnect, 3000);
@@ -823,9 +825,16 @@ function wsConnect() {
         state.targetRPM = d.target_rpm;
         state.realRPM   = d.real_rpm;
         state.angleDeg  = d.angle_deg;
-        state.dir       = d.dir === 'FWD' ? 1 : -1;
-        state.running   = d.running;
+        const newDir    = d.dir === 'FWD' ? 1 : -1;
+        if (newDir !== state.dir) {
+          state.dir = newDir;
+          document.querySelectorAll('#dirSeg button').forEach(x => x.classList.remove('on'));
+          document.querySelector(`#dirSeg button[data-v="${d.dir === 'FWD' ? 'fwd' : 'rev'}"]`).classList.add('on');
+        }
+        state.running = d.running;
+        ledEnc.classList.add('on');   // encoder data is flowing
         applyRunningState(d.running);
+        syncSliderDisplay();
         updateGauges();
         break;
       }
@@ -846,10 +855,11 @@ function wsConnect() {
         break;
       }
       case 'ready':
-        ledEnc.classList.add('on');
+        ledPower.classList.add('on');   // serial/driver conectado
         logRaw(`<span class="ok">FW</span> ${escapeHtml(m.firmware)}`, 'ok');
         break;
       case 'error':
+        ledPower.classList.remove('on');
         ledEnc.classList.remove('on');
         logRaw(`<span class="err">ERR</span> ${escapeHtml(m.msg)}`, 'err');
         break;
@@ -865,14 +875,19 @@ function wsSend(payload) {
 
 /* ===== Sync param inputs after receiving params from backend ===== */
 function syncParamInputs() {
-  document.getElementById('radius').value    = state.radiusCm;
-  document.getElementById('stepsRev').value  = state.stepsRev;
+  document.getElementById('radius').value     = state.radiusCm;
+  document.getElementById('stepsRev').value   = state.stepsRev;
   document.getElementById('microsteps').value = state.microsteps;
-  document.getElementById('encPpr').value    = state.encPpr;
-  document.getElementById('debounce').value  = state.debounce;
-  document.getElementById('rpm').value       = state.targetRPM;
-  rpmUnit.textContent = state.targetRPM + ' rpm';
-  rpm.style.setProperty('--p', ((state.targetRPM-5)/115*100)+'%');
+  document.getElementById('encPpr').value     = state.encPpr;
+  document.getElementById('debounce').value   = state.debounce;
+  syncSliderDisplay();
+}
+
+function syncSliderDisplay() {
+  const clamped = Math.min(120, Math.max(5, state.targetRPM));
+  rpm.value = clamped;
+  rpmUnit.textContent = clamped + ' rpm';
+  rpm.style.setProperty('--p', ((clamped - 5) / 115 * 100) + '%');
 }
 
 function sendParams() {
@@ -894,13 +909,13 @@ const rpm = document.getElementById('rpm');
 const rpmUnit = document.getElementById('rpmUnit');
 rpm.addEventListener('input', () => {
   state.targetRPM = +rpm.value;
-  rpmUnit.textContent = state.targetRPM + ' rpm';
-  rpm.style.setProperty('--p', ((state.targetRPM-5)/115*100)+'%');
+  syncSliderDisplay();
   updateGauges();
   wsSend({ type: 'set_target', rpm: state.targetRPM });
   logRaw(`<span class="v">CMD</span> Target → <b>${state.targetRPM} RPM</b>`);
 });
-rpm.dispatchEvent(new Event('input'));
+// Inicializa solo el display, sin enviar al WS
+syncSliderDisplay();
 
 document.getElementById('dirSeg').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
@@ -1009,7 +1024,7 @@ function updateTelemetry() {
   document.getElementById('tHalf').textContent = tHalf.toFixed(0);
   document.getElementById('tCpr').textContent = state.encPpr * 4;
   document.getElementById('tPerim').textContent = perim.toFixed(1);
-  document.getElementById('tSteps').textContent = state.totalSteps.toLocaleString('es');
+  document.getElementById('tSteps').textContent = '—';
 }
 function updateGauges() {
   document.getElementById('gTarget').textContent = fmt(state.targetRPM,1);
@@ -1020,8 +1035,6 @@ function updateGauges() {
   document.getElementById('gAng').textContent = fmt(state.angleDeg,1)+'°';
   updateTelemetry();
 }
-updateGauges();
-
 /* ===== Animation loop ===== */
 const wheelEl = document.getElementById('wheel');
 const tailEl  = document.getElementById('mouseTail');
@@ -1037,27 +1050,10 @@ let lastT = performance.now();
 function tick(now) {
   const dt = Math.min(0.1, (now - lastT)/1000); lastT = now;
 
-  // Ramp realRPM toward target with inertia
-  const target = state.running ? state.targetRPM : 0;
-  const k = state.running ? 1.6 : 3.2;
-  state.realRPM += (target - state.realRPM) * Math.min(1, dt*k);
-  // small noise when running
-  if (state.running && Math.abs(state.realRPM - target) < 1) {
-    state.realRPM = target + (Math.random()-0.5)*0.6;
-  }
-
-  // Wheel rotation (deg/s = rpm * 6)
+  // Wheel rotation visual (usa realRPM del backend, no simulación)
   const degPerSec = state.realRPM * 6 * state.dir;
   wheelAngle = (wheelAngle + degPerSec * dt) % 360;
   wheelEl.setAttribute('transform', `translate(260 180) rotate(${wheelAngle})`);
-
-  // Step counter
-  const spr = state.stepsRev * state.microsteps;
-  if (state.running) state.totalSteps += Math.abs(state.realRPM/60 * spr * dt);
-
-  // Encoder angle (deg of wheel under mouse pov)
-  state.angleDeg = (state.angleDeg + state.realRPM * 6 * state.dir * dt) % 360;
-  if (state.angleDeg < 0) state.angleDeg += 360;
 
   // Mouse animation — leg cycle frequency scales with RPM
   const cyc = (now/1000) * Math.max(2, state.realRPM/8) * Math.abs(state.dir);
