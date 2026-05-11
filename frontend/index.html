@@ -107,35 +107,6 @@
     transition: transform .15s ease;
   }
   .app-logo:hover { transform: translateY(-1px); }
-  .app-logo .crest {
-    width: 38px; height: 38px; border-radius: 999px;
-    background: radial-gradient(circle at 30% 30%, #fff3cf, var(--amber) 55%, #b86a1c);
-    display: grid; place-items: center;
-    position: relative;
-    box-shadow: inset 0 0 0 2px var(--ink);
-  }
-  .app-logo .crest::after {
-    /* sunflower seed silhouette */
-    content: "";
-    position: absolute;
-    width: 16px; height: 22px;
-    background: var(--ink);
-    border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
-    transform: rotate(-12deg);
-  }
-  .app-logo .lab {
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--ink);
-  }
-  .app-logo .lab small {
-    display: block; font-weight: 400;
-    color: var(--ink-soft); font-size: 9px; letter-spacing: 0.28em;
-    margin-top: 1px;
-  }
 
   /* ────────── LAYOUT ────────── */
   main {
@@ -502,9 +473,8 @@
   </div>
 
   <!-- Top-right logo (5-click for easter egg) -->
-  <div class="app-logo" title="Hámster Labs">
-    <div class="crest"></div>
-    <div class="lab">Hámster Labs<small>EST. 2026 · CEDAR DIV.</small></div>
+  <div class="app-logo" title="Megaomega">
+    <img src="uploads/noBgColor.png" alt="Megaomega" style="height:38px;width:auto;display:block;">
   </div>
 </header>
 

@@ -13,7 +13,7 @@ from .config import settings
 from .routes import control, ws
 from .serial_link import serial_link
 
-FRONTEND_DIR = pathlib.Path(__file__).parent.parent.parent  # backend/app/ → backend/ → Motorinador/
+FRONTEND_DIR = pathlib.Path(__file__).parent.parent.parent / "frontend"  # backend/app/ → backend/ → Motorinador/ → frontend/
 
 logging.basicConfig(
     level=logging.INFO,
