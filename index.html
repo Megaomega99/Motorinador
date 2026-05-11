@@ -1,0 +1,1120 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Motorinador — Control de Rueda de Hámster</title>
+<meta name="viewport" content="width=1440, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700;9..144,900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:          #f6efe1;       /* cedar shavings cream */
+    --bg-2:        #ecdfc6;
+    --paper:       #fffaf0;
+    --ink:         #2a1c10;       /* dark roasted brown */
+    --ink-soft:    #5b4327;
+    --line:        #d8c8a8;
+    --line-soft:   #e6d8ba;
+    --orange:      #e8601f;
+    --orange-2:    #ff8c42;
+    --amber:       #f1b04a;
+    --leaf:        #6a8a3e;
+    --red:         #d92b1f;
+    --red-deep:    #a01a11;
+    --wood:        #b9854b;
+    --wood-dark:   #6f4a23;
+    --shadow:      0 1px 0 #fff7e2 inset, 0 1px 2px rgba(80,50,15,.08), 0 8px 24px -16px rgba(80,50,15,.25);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(1100px 600px at 80% -10%, #fbe7c4 0%, transparent 60%),
+      radial-gradient(900px 700px at -5% 110%, #f4dca0 0%, transparent 55%),
+      var(--bg);
+    color: var(--ink);
+    font-family: "Inter", system-ui, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  /* Cedar shavings texture */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    background-image:
+      radial-gradient(circle at 12% 18%, rgba(155,110,55,.08) 0 1.2px, transparent 1.5px),
+      radial-gradient(circle at 78% 42%, rgba(155,110,55,.06) 0 1px, transparent 1.4px),
+      radial-gradient(circle at 35% 78%, rgba(140,95,40,.05) 0 1px, transparent 1.3px),
+      radial-gradient(circle at 62% 9%, rgba(155,110,55,.07) 0 1.4px, transparent 1.6px),
+      radial-gradient(circle at 88% 88%, rgba(140,95,40,.06) 0 1px, transparent 1.4px);
+    background-size: 220px 220px, 180px 180px, 260px 260px, 200px 200px, 240px 240px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ────────── HEADER ────────── */
+  header.topbar {
+    position: relative;
+    z-index: 5;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 22px 40px 14px;
+  }
+  .brand-mark {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .brand-glyph {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #ffd089, var(--orange));
+    box-shadow: var(--shadow);
+    display: grid; place-items: center;
+    position: relative;
+  }
+  .brand-glyph svg { width: 28px; height: 28px; }
+  .brand-words .name {
+    font-family: "Fraunces", serif;
+    font-weight: 900;
+    font-size: 28px;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    color: var(--ink);
+  }
+  .brand-words .name em {
+    font-style: italic;
+    color: var(--orange);
+    font-weight: 600;
+  }
+  .brand-words .tag {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  /* Top-right logo  */
+  .app-logo {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 14px 8px 8px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    user-select: none;
+    transition: transform .15s ease;
+  }
+  .app-logo:hover { transform: translateY(-1px); }
+  .app-logo .crest {
+    width: 38px; height: 38px; border-radius: 999px;
+    background: radial-gradient(circle at 30% 30%, #fff3cf, var(--amber) 55%, #b86a1c);
+    display: grid; place-items: center;
+    position: relative;
+    box-shadow: inset 0 0 0 2px var(--ink);
+  }
+  .app-logo .crest::after {
+    /* sunflower seed silhouette */
+    content: "";
+    position: absolute;
+    width: 16px; height: 22px;
+    background: var(--ink);
+    border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+    transform: rotate(-12deg);
+  }
+  .app-logo .lab {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  .app-logo .lab small {
+    display: block; font-weight: 400;
+    color: var(--ink-soft); font-size: 9px; letter-spacing: 0.28em;
+    margin-top: 1px;
+  }
+
+  /* ────────── LAYOUT ────────── */
+  main {
+    position: relative; z-index: 1;
+    display: grid;
+    grid-template-columns: 360px 1fr 340px;
+    gap: 24px;
+    padding: 8px 40px 40px;
+    align-items: start;
+  }
+
+  .panel {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    padding: 22px;
+  }
+  .panel h2 {
+    font-family: "Fraunces", serif;
+    font-weight: 700;
+    font-size: 18px;
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+  .panel .sub {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 16px;
+  }
+
+  /* ── form ── */
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 12px; font-weight: 600; color: var(--ink);
+    margin-bottom: 6px;
+  }
+  .field label .unit {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px; color: var(--ink-soft);
+    letter-spacing: 0.1em;
+  }
+  .field input[type="number"], .field input[type="text"], .field select {
+    width: 100%;
+    background: #fdf6e6;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 9px 12px;
+    font: 500 14px "IBM Plex Mono", monospace;
+    color: var(--ink);
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .field input:focus, .field select:focus {
+    border-color: var(--orange);
+    box-shadow: 0 0 0 3px rgba(232,96,31,.18);
+  }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* range slider */
+  .field input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 6px;
+    background: linear-gradient(90deg, var(--orange) var(--p,30%), var(--line-soft) var(--p,30%));
+    border-radius: 999px;
+    outline: none;
+    margin: 8px 0 4px;
+  }
+  .field input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px; height: 18px; border-radius: 999px;
+    background: var(--paper);
+    border: 2px solid var(--orange);
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(80,50,15,.2);
+  }
+  .field input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 999px;
+    background: var(--paper); border: 2px solid var(--orange); cursor: pointer;
+  }
+
+  /* segmented */
+  .seg {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+    background: #fdf6e6; border: 1px solid var(--line);
+    border-radius: 10px; padding: 3px;
+  }
+  .seg button {
+    appearance: none; border: 0; background: transparent;
+    padding: 8px 0;
+    font: 600 12px "IBM Plex Mono", monospace;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ink-soft);
+    border-radius: 8px; cursor: pointer;
+    transition: all .15s;
+  }
+  .seg button.on {
+    background: var(--ink); color: #fff7e2;
+    box-shadow: 0 2px 6px rgba(80,50,15,.25);
+  }
+
+  /* ────────── STAGE (center) ────────── */
+  .stage {
+    background:
+      radial-gradient(circle at 50% 110%, rgba(232,96,31,.15) 0%, transparent 55%),
+      linear-gradient(180deg, #fffaf0 0%, #fdf2dc 100%);
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    box-shadow: var(--shadow);
+    padding: 24px 24px 28px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stage::before {
+    /* corner ticks (HUD) */
+    content: "";
+    position: absolute; inset: 12px;
+    background:
+      linear-gradient(var(--ink-soft),var(--ink-soft)) left top/14px 1px no-repeat,
+      linear-gradient(var(--ink-soft),var(--ink-soft)) left top/1px 14px no-repeat,
+      linear-gradient(var(--ink-soft),var(--ink-soft)) right top/14px 1px no-repeat,
+      linear-gradient(var(--ink-soft),var(--ink-soft)) right top/1px 14px no-repeat,
+      linear-gradient(var(--ink-soft),var(--ink-soft)) left bottom/14px 1px no-repeat,
+      linear-gradient(var(--ink-soft),var(--ink-soft)) left bottom/1px 14px no-repeat,
+      linear-gradient(var(--ink-soft),var(--ink-soft)) right bottom/14px 1px no-repeat,
+      linear-gradient(var(--ink-soft),var(--ink-soft)) right bottom/1px 14px no-repeat;
+    opacity: .35;
+    pointer-events: none;
+  }
+  .stage-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px;
+  }
+  .stage-head .title {
+    font-family: "Fraunces", serif; font-weight: 700; font-size: 20px;
+    letter-spacing: -0.01em;
+  }
+  .stage-head .title em { font-style: italic; color: var(--orange); }
+  .stage-head .dot {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    letter-spacing: 0.16em; color: var(--ink-soft);
+    text-transform: uppercase;
+  }
+  .stage-head .dot::before {
+    content: ""; width: 8px; height: 8px; border-radius: 999px;
+    background: var(--ink-soft);
+    box-shadow: 0 0 0 0 currentColor;
+  }
+  .stage-head.live .dot { color: var(--leaf); }
+  .stage-head.live .dot::before {
+    background: var(--leaf);
+    animation: pulse 1.6s ease-out infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(106,138,62,.5); }
+    70%  { box-shadow: 0 0 0 10px rgba(106,138,62,0); }
+    100% { box-shadow: 0 0 0 0 rgba(106,138,62,0); }
+  }
+
+  /* Wheel scene */
+  .scene {
+    display: flex; justify-content: center;
+    margin: 6px 0 12px;
+    position: relative;
+  }
+  .scene svg { display: block; width: 520px; height: 380px; }
+
+  /* Gauges row */
+  .gauges {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+    margin-top: 8px;
+  }
+  .gauge {
+    background: #fffaf0;
+    border: 1px solid var(--line-soft);
+    border-radius: 14px;
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .gauge .lbl {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--ink-soft);
+  }
+  .gauge .val {
+    font-family: "Fraunces", serif;
+    font-weight: 700;
+    font-size: 36px; line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .gauge .val small {
+    font: 500 14px "IBM Plex Mono", monospace;
+    color: var(--ink-soft); margin-left: 4px;
+    letter-spacing: 0.04em;
+  }
+  .gauge.target .val { color: var(--orange); }
+  .gauge.real   .val { color: var(--ink); }
+  .gauge.linear .val { color: var(--wood-dark); }
+
+  /* Big red button */
+  .start-row { display: flex; align-items: center; gap: 18px; margin-top: 16px; }
+  .ledpanel {
+    flex: 1;
+    display: flex; gap: 10px; align-items: center;
+    padding: 12px 14px;
+    background: #fffaf0;
+    border: 1px solid var(--line-soft);
+    border-radius: 14px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px; letter-spacing: 0.12em;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+  }
+  .led {
+    width: 10px; height: 10px; border-radius: 999px;
+    background: var(--line);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.15);
+  }
+  .led.on  { background: var(--leaf); box-shadow: 0 0 8px rgba(106,138,62,.7), inset 0 0 0 1px rgba(0,0,0,.15); }
+  .led.warn { background: var(--amber); box-shadow: 0 0 8px rgba(241,176,74,.7); }
+
+  .bigbtn {
+    position: relative;
+    appearance: none; border: 0;
+    width: 158px; height: 96px;
+    border-radius: 22px;
+    background:
+      radial-gradient(circle at 35% 30%, #ff6a5c 0%, var(--red) 45%, var(--red-deep) 100%);
+    color: #fff7e2;
+    cursor: pointer;
+    font: 800 18px "Fraunces", serif;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    box-shadow:
+      inset 0 -6px 0 rgba(0,0,0,.25),
+      inset 0 2px 0 rgba(255,255,255,.25),
+      0 8px 0 #6a0f08,
+      0 14px 20px -6px rgba(160,26,17,.6);
+    transition: transform .08s ease, box-shadow .08s ease, filter .15s;
+  }
+  .bigbtn::before {
+    content: "";
+    position: absolute; inset: 6px;
+    border-radius: 18px;
+    border: 2px dashed rgba(255,255,255,.25);
+    pointer-events: none;
+  }
+  .bigbtn:hover { filter: brightness(1.05); }
+  .bigbtn:active {
+    transform: translateY(6px);
+    box-shadow:
+      inset 0 -3px 0 rgba(0,0,0,.25),
+      inset 0 2px 0 rgba(255,255,255,.25),
+      0 2px 0 #6a0f08,
+      0 6px 10px -4px rgba(160,26,17,.5);
+  }
+  .bigbtn.running {
+    background:
+      radial-gradient(circle at 35% 30%, #2f4a1e 0%, #3d6024 45%, #243a13 100%);
+    box-shadow:
+      inset 0 -6px 0 rgba(0,0,0,.3),
+      inset 0 2px 0 rgba(255,255,255,.18),
+      0 8px 0 #1a2a0c,
+      0 14px 20px -6px rgba(36,58,19,.5);
+  }
+  .bigbtn .lbl { display: block; font-size: 11px; font-family: "IBM Plex Mono", monospace; letter-spacing: 0.22em; opacity: .85; }
+  .bigbtn .action { display: block; font-size: 22px; line-height: 1.1; margin-top: 2px; }
+
+  /* ────────── RIGHT PANEL: serial log ────────── */
+  .panel.right { padding-bottom: 14px; }
+  .log {
+    background: #1c130a;
+    color: #f1d6a3;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    line-height: 1.55;
+    padding: 12px 14px;
+    border-radius: 12px;
+    height: 280px; overflow: auto;
+    border: 1px solid #2b1d10;
+    box-shadow: inset 0 0 0 1px rgba(255,200,120,.05);
+  }
+  .log .ts { color: #a07a44; margin-right: 6px; }
+  .log .ok { color: #b9d36f; }
+  .log .warn { color: var(--amber); }
+  .log .err { color: #ff7a6a; }
+  .log .v   { color: #ffb56a; }
+
+  .pillrow { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .pill {
+    appearance: none; border: 1px solid var(--line);
+    background: #fdf6e6;
+    border-radius: 999px;
+    padding: 6px 10px;
+    font: 600 10px "IBM Plex Mono", monospace;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink); cursor: pointer;
+  }
+  .pill:hover { background: #f7ead0; }
+  .pill.danger { color: var(--red); border-color: rgba(217,43,31,.4); }
+
+  /* footer strip */
+  .footstrip {
+    grid-column: 1 / -1;
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 6px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .footstrip .left { display: flex; gap: 14px; align-items: center; }
+  .footstrip .left::before {
+    content: ""; width: 28px; height: 1px; background: var(--ink-soft); opacity: .4;
+  }
+
+  /* divider */
+  .divider {
+    height: 1px; background: var(--line-soft); margin: 14px 0;
+  }
+  .group-title {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--orange);
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .group-title::after {
+    content: ""; flex: 1; height: 1px; background: var(--line-soft);
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand-mark">
+    <div class="brand-glyph">
+      <!-- spinning wheel glyph -->
+      <svg viewBox="0 0 32 32" fill="none">
+        <circle cx="16" cy="16" r="13" stroke="#2a1c10" stroke-width="2"/>
+        <circle cx="16" cy="16" r="2" fill="#2a1c10"/>
+        <g stroke="#2a1c10" stroke-width="1.5" stroke-linecap="round">
+          <line x1="16" y1="3" x2="16" y2="9"/>
+          <line x1="16" y1="23" x2="16" y2="29"/>
+          <line x1="3" y1="16" x2="9" y2="16"/>
+          <line x1="23" y1="16" x2="29" y2="16"/>
+          <line x1="6.5" y1="6.5" x2="11" y2="11"/>
+          <line x1="21" y1="21" x2="25.5" y2="25.5"/>
+          <line x1="25.5" y1="6.5" x2="21" y2="11"/>
+          <line x1="11" y1="21" x2="6.5" y2="25.5"/>
+        </g>
+      </svg>
+    </div>
+    <div class="brand-words">
+      <div class="name">Motorin<em>ador</em></div>
+      <div class="tag">NEMA17 · TMC2208 · ENCODER X4</div>
+    </div>
+  </div>
+
+  <!-- Top-right logo (5-click for easter egg) -->
+  <div class="app-logo" title="Hámster Labs">
+    <div class="crest"></div>
+    <div class="lab">Hámster Labs<small>EST. 2026 · CEDAR DIV.</small></div>
+  </div>
+</header>
+
+<main>
+  <!-- ───────── LEFT: parameters ───────── -->
+  <section class="panel left">
+    <h2>Parámetros</h2>
+    <div class="sub">Control · Encoder · Mecánica</div>
+
+    <div class="group-title">Velocidad objetivo</div>
+    <div class="field">
+      <label>Target RPM <span class="unit" id="rpmUnit">30 rpm</span></label>
+      <input id="rpm" type="range" min="5" max="120" step="5" value="30">
+    </div>
+    <div class="field">
+      <label>Sentido de giro</label>
+      <div class="seg" id="dirSeg">
+        <button data-v="fwd" class="on">↻ Adelante</button>
+        <button data-v="rev">↺ Reversa</button>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="group-title">Rueda</div>
+    <div class="field">
+      <label>Radio de la rueda <span class="unit">cm</span></label>
+      <input id="radius" type="number" min="1" max="40" step="0.5" value="12">
+    </div>
+
+    <div class="divider"></div>
+    <div class="group-title">Driver TMC2208</div>
+    <div class="row2">
+      <div class="field">
+        <label>Pasos/rev <span class="unit">×</span></label>
+        <input id="stepsRev" type="number" value="200" min="1">
+      </div>
+      <div class="field">
+        <label>Microsteps</label>
+        <select id="microsteps">
+          <option>1</option><option>2</option><option>4</option>
+          <option selected>8</option><option>16</option><option>32</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="group-title">Encoder X4</div>
+    <div class="row2">
+      <div class="field">
+        <label>PPR</label>
+        <input id="encPpr" type="number" value="600" min="1">
+      </div>
+      <div class="field">
+        <label>Debounce <span class="unit">µs</span></label>
+        <input id="debounce" type="number" value="50" min="0">
+      </div>
+    </div>
+
+    <div class="pillrow">
+      <button class="pill" data-cmd="z">Z · Reset encoder</button>
+      <button class="pill" data-cmd="r">R · Invertir</button>
+      <button class="pill danger" data-cmd="estop">E-STOP</button>
+    </div>
+  </section>
+
+  <!-- ───────── CENTER: hamster wheel stage ───────── -->
+  <section class="stage">
+    <div class="stage-head" id="stageHead">
+      <div class="title">El <em>hámster</em> corre en su rueda</div>
+      <div class="dot" id="liveDot">EN ESPERA</div>
+    </div>
+
+    <div class="scene">
+      <svg id="wheelSvg" viewBox="0 0 520 380">
+        <defs>
+          <radialGradient id="wheelMetal" cx="50%" cy="50%" r="50%">
+            <stop offset="0%"  stop-color="#fff7e2"/>
+            <stop offset="60%" stop-color="#e8d6a8"/>
+            <stop offset="100%" stop-color="#a78146"/>
+          </radialGradient>
+          <linearGradient id="standGrad" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="#c79155"/>
+            <stop offset="100%" stop-color="#7a4a1f"/>
+          </linearGradient>
+          <radialGradient id="mouseFur" cx="40%" cy="35%" r="70%">
+            <stop offset="0%" stop-color="#fff3d6"/>
+            <stop offset="60%" stop-color="#d9b27d"/>
+            <stop offset="100%" stop-color="#a07440"/>
+          </radialGradient>
+          <pattern id="floor" width="14" height="14" patternUnits="userSpaceOnUse">
+            <rect width="14" height="14" fill="#f6e3b8"/>
+            <path d="M2 7 q3 -2 6 0 t6 0" stroke="#caa069" stroke-width=".7" fill="none" opacity=".5"/>
+            <path d="M0 12 q3 -2 6 0 t6 0" stroke="#caa069" stroke-width=".7" fill="none" opacity=".3"/>
+          </pattern>
+        </defs>
+
+        <!-- floor / shavings -->
+        <rect x="0" y="320" width="520" height="60" fill="url(#floor)"/>
+        <ellipse cx="260" cy="328" rx="180" ry="14" fill="rgba(80,50,15,.12)"/>
+
+        <!-- stand -->
+        <g>
+          <rect x="60"  y="180" width="14" height="148" rx="6" fill="url(#standGrad)"/>
+          <rect x="446" y="180" width="14" height="148" rx="6" fill="url(#standGrad)"/>
+          <rect x="50"  y="320" width="34" height="14" rx="4" fill="#7a4a1f"/>
+          <rect x="436" y="320" width="34" height="14" rx="4" fill="#7a4a1f"/>
+          <!-- axle -->
+          <rect x="66" y="178" width="388" height="6" rx="3" fill="#5a3a1a"/>
+        </g>
+
+        <!-- WHEEL: spinning group -->
+        <g id="wheel" transform="translate(260 180)">
+          <!-- outer rim -->
+          <circle r="138" fill="none" stroke="url(#wheelMetal)" stroke-width="10"/>
+          <circle r="138" fill="none" stroke="#5a3a1a" stroke-width="1" opacity=".4"/>
+          <circle r="128" fill="none" stroke="#5a3a1a" stroke-width="1" opacity=".25"/>
+          <!-- rungs -->
+          <g id="rungs" stroke="#9c6c34" stroke-width="3" stroke-linecap="round" opacity=".85"></g>
+          <!-- hub -->
+          <circle r="14" fill="#3a2412"/>
+          <circle r="6"  fill="#f1b04a"/>
+          <!-- spokes -->
+          <g stroke="#a78146" stroke-width="2" opacity=".75">
+            <line x1="0" y1="-128" x2="0" y2="128"/>
+            <line x1="-128" y1="0" x2="128" y2="0"/>
+            <line x1="-90"  y1="-90" x2="90"  y2="90"/>
+            <line x1="-90"  y1="90"  x2="90"  y2="-90"/>
+          </g>
+        </g>
+
+        <!-- MOUSE — anchored at bottom of wheel, NOT rotating -->
+        <g id="mouse" transform="translate(260 295)">
+          <!-- shadow -->
+          <ellipse cx="0" cy="22" rx="42" ry="5" fill="rgba(80,50,15,.18)"/>
+          <!-- tail -->
+          <path id="mouseTail" d="M -34 4 q -22 -8 -38 6"
+                fill="none" stroke="#c08458" stroke-width="3" stroke-linecap="round"/>
+          <!-- back legs -->
+          <g id="legBackL">
+            <ellipse cx="-12" cy="14" rx="6" ry="9" fill="#a07440"/>
+          </g>
+          <g id="legBackR">
+            <ellipse cx="8" cy="14" rx="6" ry="9" fill="#a07440"/>
+          </g>
+          <!-- body -->
+          <ellipse cx="-6" cy="-2" rx="36" ry="22" fill="url(#mouseFur)"/>
+          <!-- belly -->
+          <ellipse cx="-4" cy="7" rx="22" ry="11" fill="#fff5dc" opacity=".8"/>
+          <!-- front legs -->
+          <g id="legFrontL">
+            <ellipse cx="18" cy="12" rx="4" ry="7" fill="#8a5c2a"/>
+          </g>
+          <g id="legFrontR">
+            <ellipse cx="26" cy="14" rx="4" ry="7" fill="#8a5c2a"/>
+          </g>
+          <!-- head -->
+          <g id="mouseHead" transform="translate(28 -6)">
+            <ellipse cx="0" cy="0" rx="18" ry="15" fill="url(#mouseFur)"/>
+            <!-- ear -->
+            <circle cx="-4" cy="-12" r="7" fill="#a07440"/>
+            <circle cx="-4" cy="-12" r="4" fill="#f0b3a0"/>
+            <!-- eye -->
+            <circle cx="6" cy="-3" r="2.4" fill="#2a1c10"/>
+            <circle cx="6.7" cy="-3.7" r=".8" fill="#fff"/>
+            <!-- nose -->
+            <circle cx="16" cy="2" r="1.8" fill="#b14a3a"/>
+            <!-- whiskers -->
+            <g stroke="#5b4327" stroke-width=".8" opacity=".7">
+              <line x1="14" y1="3" x2="22" y2="6"/>
+              <line x1="14" y1="3" x2="22" y2="3"/>
+              <line x1="14" y1="3" x2="22" y2="0"/>
+            </g>
+          </g>
+        </g>
+
+        <!-- speed lines -->
+        <g id="speedLines" stroke="#e8601f" stroke-width="2" stroke-linecap="round" opacity="0"></g>
+      </svg>
+    </div>
+
+    <div class="gauges">
+      <div class="gauge target">
+        <div class="lbl">Velocidad objetivo</div>
+        <div class="val"><span id="gTarget">30.0</span><small>RPM</small></div>
+      </div>
+      <div class="gauge real">
+        <div class="lbl">Velocidad real · encoder</div>
+        <div class="val"><span id="gReal">0.0</span><small>RPM</small></div>
+      </div>
+      <div class="gauge linear">
+        <div class="lbl">Velocidad lineal · v = ω r</div>
+        <div class="val"><span id="gLin">0.00</span><small>m/s</small></div>
+      </div>
+    </div>
+
+    <div class="start-row">
+      <div class="ledpanel">
+        <div class="led" id="ledPower"></div> <span>Driver</span>
+        <div class="led warn" id="ledEnc"></div> <span>Encoder</span>
+        <div class="led" id="ledMotor"></div> <span>Motor</span>
+        <span style="margin-left:auto;color:var(--ink-soft)">Ang: <b id="gAng" style="color:var(--ink)">0.0°</b></span>
+      </div>
+      <button class="bigbtn" id="startBtn">
+        <span class="lbl">▶ INICIAR</span>
+        <span class="action">CORRER</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- ───────── RIGHT: log + readout ───────── -->
+  <section class="panel right">
+    <h2>Monitor Serial</h2>
+    <div class="sub">115200 baud · /dev/Hámster</div>
+    <div class="log" id="log"></div>
+
+    <div class="pillrow">
+      <button class="pill" data-cmd="+">+ RPM</button>
+      <button class="pill" data-cmd="-">− RPM</button>
+      <button class="pill" data-cmd="s">S · Toggle</button>
+      <button class="pill" data-cmd="clr">CLR log</button>
+    </div>
+
+    <div class="divider"></div>
+    <div class="group-title">Telemetría</div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.9;color:var(--ink-soft)">
+      <div>f_STEP &nbsp;= <span id="tStepF" style="color:var(--ink)">800</span> Hz</div>
+      <div>T_half &nbsp;= <span id="tHalf" style="color:var(--ink)">625</span> µs</div>
+      <div>counts/rev &nbsp;= <span id="tCpr" style="color:var(--ink)">2400</span></div>
+      <div>perímetro &nbsp;= <span id="tPerim" style="color:var(--ink)">75.4</span> cm</div>
+      <div>pasos totales &nbsp;= <span id="tSteps" style="color:var(--ink)">0</span></div>
+      <div>tiempo activo &nbsp;= <span id="tElapsed" style="color:var(--ink)">00:00</span></div>
+    </div>
+  </section>
+
+  <div class="footstrip">
+    <div class="left"><span>FastAPI · ws://motor/control</span></div>
+    <div>v3.1 · build · 2026-05</div>
+  </div>
+</main>
+
+<script src="easteregg-hamster.js"></script>
+<script>
+/* ===== State ===== */
+const state = {
+  targetRPM: 30,
+  realRPM:   0,
+  dir:       1,
+  running:   false,
+  radiusCm:  12,
+  stepsRev:  200,
+  microsteps: 8,
+  encPpr:    600,
+  debounce:  50,
+  angleDeg:  0,
+  totalSteps: 0,
+  startedAt: null,
+  wsConnected: false,
+};
+
+/* ===== Log ===== */
+const logEl = document.getElementById('log');
+function ts() { return new Date().toTimeString().slice(0,8); }
+function logLine(msg, cls='') {
+  const div = document.createElement('div');
+  div.innerHTML = `<span class="ts">[${ts()}]</span> ${escapeHtml(msg)}`;
+  if (cls) div.classList.add(cls);
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+  while (logEl.children.length > 200) logEl.removeChild(logEl.firstChild);
+}
+function logRaw(html, cls='') {
+  const div = document.createElement('div');
+  div.innerHTML = `<span class="ts">[${ts()}]</span> ${html}`;
+  if (cls) div.classList.add(cls);
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+  while (logEl.children.length > 200) logEl.removeChild(logEl.firstChild);
+}
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function fmt(n, d=1) { return n.toFixed(d); }
+
+/* ===== WebSocket connection ===== */
+const WS_URL = 'ws://localhost:8000/ws';
+let ws = null;
+
+function wsConnect() {
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    state.wsConnected = true;
+    document.getElementById('liveDot').textContent = 'CONECTADO';
+    ledPower.classList.add('on');
+    logRaw('<span class="ok">WS</span> Backend conectado');
+  };
+
+  ws.onclose = () => {
+    state.wsConnected = false;
+    ledPower.classList.remove('on');
+    document.getElementById('liveDot').textContent = 'DESCONECTADO';
+    logRaw('<span class="err">WS</span> Backend desconectado — reintentando en 3 s...', 'err');
+    setTimeout(wsConnect, 3000);
+  };
+
+  ws.onerror = () => {
+    logRaw('<span class="err">WS</span> Error de conexión', 'err');
+  };
+
+  ws.onmessage = (e) => {
+    let m;
+    try { m = JSON.parse(e.data); } catch { return; }
+
+    switch (m.type) {
+      case 'status': {
+        const d = m.data;
+        state.targetRPM = d.target_rpm;
+        state.realRPM   = d.real_rpm;
+        state.angleDeg  = d.angle_deg;
+        state.dir       = d.dir === 'FWD' ? 1 : -1;
+        state.running   = d.running;
+        applyRunningState(d.running);
+        updateGauges();
+        break;
+      }
+      case 'log': {
+        const lvl = m.level === 'error' ? 'err' : m.level === 'warn' ? 'warn' : 'ok';
+        logLine(m.msg, lvl);
+        break;
+      }
+      case 'params': {
+        const p = m.data;
+        state.radiusCm  = p.radius_cm;
+        state.stepsRev  = p.steps_per_rev;
+        state.microsteps = p.microsteps;
+        state.encPpr    = p.enc_ppr;
+        state.debounce  = p.debounce_us;
+        syncParamInputs();
+        updateTelemetry();
+        break;
+      }
+      case 'ready':
+        ledEnc.classList.add('on');
+        logRaw(`<span class="ok">FW</span> ${escapeHtml(m.firmware)}`, 'ok');
+        break;
+      case 'error':
+        ledEnc.classList.remove('on');
+        logRaw(`<span class="err">ERR</span> ${escapeHtml(m.msg)}`, 'err');
+        break;
+    }
+  };
+}
+
+function wsSend(payload) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(payload));
+  }
+}
+
+/* ===== Sync param inputs after receiving params from backend ===== */
+function syncParamInputs() {
+  document.getElementById('radius').value    = state.radiusCm;
+  document.getElementById('stepsRev').value  = state.stepsRev;
+  document.getElementById('microsteps').value = state.microsteps;
+  document.getElementById('encPpr').value    = state.encPpr;
+  document.getElementById('debounce').value  = state.debounce;
+  document.getElementById('rpm').value       = state.targetRPM;
+  rpmUnit.textContent = state.targetRPM + ' rpm';
+  rpm.style.setProperty('--p', ((state.targetRPM-5)/115*100)+'%');
+}
+
+function sendParams() {
+  wsSend({
+    type: 'set_params',
+    data: {
+      radius_cm:    state.radiusCm,
+      steps_per_rev: state.stepsRev,
+      microsteps:   state.microsteps,
+      enc_ppr:      state.encPpr,
+      debounce_us:  state.debounce,
+      rpm_min: 5, rpm_max: 120, rpm_step: 5,
+    }
+  });
+}
+
+/* ===== UI bindings ===== */
+const rpm = document.getElementById('rpm');
+const rpmUnit = document.getElementById('rpmUnit');
+rpm.addEventListener('input', () => {
+  state.targetRPM = +rpm.value;
+  rpmUnit.textContent = state.targetRPM + ' rpm';
+  rpm.style.setProperty('--p', ((state.targetRPM-5)/115*100)+'%');
+  updateGauges();
+  wsSend({ type: 'set_target', rpm: state.targetRPM });
+  logRaw(`<span class="v">CMD</span> Target → <b>${state.targetRPM} RPM</b>`);
+});
+rpm.dispatchEvent(new Event('input'));
+
+document.getElementById('dirSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#dirSeg button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  const newDir = b.dataset.v === 'fwd' ? 1 : -1;
+  if (newDir !== state.dir) {
+    state.dir = newDir;
+    wsSend({ type: 'cmd', cmd: 'reverse' });
+    logRaw(`<span class="v">DIR</span> ${state.dir>0?'FWD ↻':'REV ↺'}`);
+  }
+});
+
+document.getElementById('radius').addEventListener('input', e => {
+  state.radiusCm = Math.max(0.1, +e.target.value || 0.1);
+  sendParams();
+  updateGauges();
+});
+document.getElementById('stepsRev').addEventListener('input', e => {
+  state.stepsRev = Math.max(1, +e.target.value || 200);
+  sendParams();
+  updateTelemetry();
+});
+document.getElementById('microsteps').addEventListener('change', e => {
+  state.microsteps = +e.target.value;
+  sendParams();
+  updateTelemetry();
+});
+document.getElementById('encPpr').addEventListener('input', e => {
+  state.encPpr = Math.max(1, +e.target.value || 600);
+  sendParams();
+  updateTelemetry();
+});
+document.getElementById('debounce').addEventListener('input', e => {
+  state.debounce = Math.max(0, +e.target.value || 0);
+  sendParams();
+});
+
+/* command pills */
+document.body.addEventListener('click', e => {
+  const b = e.target.closest('[data-cmd]'); if (!b) return;
+  const cmd = b.dataset.cmd;
+  if (cmd === '+') { rpm.value = Math.min(120, +rpm.value + 5); rpm.dispatchEvent(new Event('input')); }
+  else if (cmd === '-') { rpm.value = Math.max(5, +rpm.value - 5); rpm.dispatchEvent(new Event('input')); }
+  else if (cmd === 'r') { wsSend({ type: 'cmd', cmd: 'reverse' }); }
+  else if (cmd === 's') { wsSend({ type: 'cmd', cmd: state.running ? 'stop' : 'start' }); }
+  else if (cmd === 'z') { wsSend({ type: 'cmd', cmd: 'zero_encoder' }); logRaw('<span class="ok">ENC</span> Encoder → 0'); }
+  else if (cmd === 'estop') { wsSend({ type: 'cmd', cmd: 'e_stop' }); logRaw('<span class="err">⚠ E-STOP</span> motor detenido','err'); }
+  else if (cmd === 'clr') { logEl.innerHTML = ''; }
+});
+
+/* big button */
+const startBtn = document.getElementById('startBtn');
+const stageHead = document.getElementById('stageHead');
+const liveDot = document.getElementById('liveDot');
+const ledMotor = document.getElementById('ledMotor');
+const ledPower = document.getElementById('ledPower');
+const ledEnc = document.getElementById('ledEnc');
+
+function applyRunningState(running) {
+  if (running) {
+    if (!state.startedAt) state.startedAt = performance.now();
+    startBtn.classList.add('running');
+    startBtn.querySelector('.lbl').textContent = '■ DETENER';
+    startBtn.querySelector('.action').textContent = 'PARAR';
+    stageHead.classList.add('live');
+    liveDot.textContent = 'CORRIENDO';
+    ledMotor.classList.add('on');
+  } else {
+    state.startedAt = null;
+    startBtn.classList.remove('running');
+    startBtn.querySelector('.lbl').textContent = '▶ INICIAR';
+    startBtn.querySelector('.action').textContent = 'CORRER';
+    stageHead.classList.remove('live');
+    liveDot.textContent = state.wsConnected ? 'CONECTADO' : 'EN ESPERA';
+    ledMotor.classList.remove('on');
+  }
+}
+
+startBtn.addEventListener('click', () => {
+  wsSend({ type: 'cmd', cmd: state.running ? 'stop' : 'start' });
+});
+
+/* ===== Wheel rungs (one-time draw) ===== */
+(function makeRungs(){
+  const rungs = document.getElementById('rungs');
+  const N = 28, R = 133;
+  for (let i=0;i<N;i++){
+    const a = (i/N) * Math.PI * 2;
+    const x1 = Math.cos(a)*R, y1 = Math.sin(a)*R;
+    const x2 = Math.cos(a)*(R-12), y2 = Math.sin(a)*(R-12);
+    const ln = document.createElementNS('http://www.w3.org/2000/svg','line');
+    ln.setAttribute('x1',x1.toFixed(2)); ln.setAttribute('y1',y1.toFixed(2));
+    ln.setAttribute('x2',x2.toFixed(2)); ln.setAttribute('y2',y2.toFixed(2));
+    rungs.appendChild(ln);
+  }
+})();
+
+/* ===== Compute helpers ===== */
+function updateTelemetry() {
+  const spr = state.stepsRev * state.microsteps;
+  const fStep = state.realRPM * spr / 60;
+  const tHalf = fStep > 0.01 ? 0.5e6/fStep : 0;
+  const perim = 2 * Math.PI * state.radiusCm;
+  document.getElementById('tStepF').textContent = fStep.toFixed(0);
+  document.getElementById('tHalf').textContent = tHalf.toFixed(0);
+  document.getElementById('tCpr').textContent = state.encPpr * 4;
+  document.getElementById('tPerim').textContent = perim.toFixed(1);
+  document.getElementById('tSteps').textContent = state.totalSteps.toLocaleString('es');
+}
+function updateGauges() {
+  document.getElementById('gTarget').textContent = fmt(state.targetRPM,1);
+  document.getElementById('gReal').textContent   = fmt(state.realRPM,1);
+  const omega = state.realRPM * 2 * Math.PI / 60;             // rad/s
+  const v = omega * (state.radiusCm/100);                     // m/s (radio en m)
+  document.getElementById('gLin').textContent = fmt(v,2);
+  document.getElementById('gAng').textContent = fmt(state.angleDeg,1)+'°';
+  updateTelemetry();
+}
+updateGauges();
+
+/* ===== Animation loop ===== */
+const wheelEl = document.getElementById('wheel');
+const tailEl  = document.getElementById('mouseTail');
+const headEl  = document.getElementById('mouseHead');
+const legBL = document.getElementById('legBackL');
+const legBR = document.getElementById('legBackR');
+const legFL = document.getElementById('legFrontL');
+const legFR = document.getElementById('legFrontR');
+const speedLines = document.getElementById('speedLines');
+
+let wheelAngle = 0;
+let lastT = performance.now();
+function tick(now) {
+  const dt = Math.min(0.1, (now - lastT)/1000); lastT = now;
+
+  // Ramp realRPM toward target with inertia
+  const target = state.running ? state.targetRPM : 0;
+  const k = state.running ? 1.6 : 3.2;
+  state.realRPM += (target - state.realRPM) * Math.min(1, dt*k);
+  // small noise when running
+  if (state.running && Math.abs(state.realRPM - target) < 1) {
+    state.realRPM = target + (Math.random()-0.5)*0.6;
+  }
+
+  // Wheel rotation (deg/s = rpm * 6)
+  const degPerSec = state.realRPM * 6 * state.dir;
+  wheelAngle = (wheelAngle + degPerSec * dt) % 360;
+  wheelEl.setAttribute('transform', `translate(260 180) rotate(${wheelAngle})`);
+
+  // Step counter
+  const spr = state.stepsRev * state.microsteps;
+  if (state.running) state.totalSteps += Math.abs(state.realRPM/60 * spr * dt);
+
+  // Encoder angle (deg of wheel under mouse pov)
+  state.angleDeg = (state.angleDeg + state.realRPM * 6 * state.dir * dt) % 360;
+  if (state.angleDeg < 0) state.angleDeg += 360;
+
+  // Mouse animation — leg cycle frequency scales with RPM
+  const cyc = (now/1000) * Math.max(2, state.realRPM/8) * Math.abs(state.dir);
+  const sw = Math.sin(cyc*Math.PI*2);
+  const sw2 = Math.sin(cyc*Math.PI*2 + Math.PI);
+  legBL.setAttribute('transform', `translate(0 ${(sw>0?sw*4:0)}) rotate(${sw*18} -12 5)`);
+  legBR.setAttribute('transform', `translate(0 ${(sw2>0?sw2*4:0)}) rotate(${sw2*18} 8 5)`);
+  legFL.setAttribute('transform', `translate(0 ${(sw2>0?sw2*3:0)}) rotate(${sw2*22} 18 5)`);
+  legFR.setAttribute('transform', `translate(0 ${(sw>0?sw*3:0)}) rotate(${sw*22} 26 5)`);
+
+  // body bob
+  const bob = Math.sin(cyc*Math.PI*4) * Math.min(2, state.realRPM/40);
+  document.getElementById('mouse').setAttribute('transform', `translate(260 ${295 + bob})`);
+
+  // Tail wag
+  const wag = Math.sin(now/180) * Math.min(20, state.realRPM/3);
+  tailEl.setAttribute('d', `M -34 4 q -22 ${-8 - wag*0.3} -38 ${6 + wag}`);
+  // Head bob
+  headEl.setAttribute('transform', `translate(28 ${-6 + bob*0.4}) rotate(${Math.sin(cyc*Math.PI*2)*4})`);
+
+  // Speed lines
+  const speedAlpha = Math.min(1, Math.max(0, (Math.abs(state.realRPM)-25)/95));
+  speedLines.setAttribute('opacity', speedAlpha.toFixed(2));
+  if (speedAlpha > 0.05 && Math.random() < 0.35) {
+    while (speedLines.children.length > 14) speedLines.removeChild(speedLines.firstChild);
+    const y = 250 + Math.random()*70;
+    const xs = state.dir>0 ? 90 + Math.random()*120 : 320 + Math.random()*120;
+    const xe = xs + (state.dir>0 ? -30 - Math.random()*40 : 30 + Math.random()*40);
+    const ln = document.createElementNS('http://www.w3.org/2000/svg','line');
+    ln.setAttribute('x1', xs.toFixed(1));
+    ln.setAttribute('y1', y.toFixed(1));
+    ln.setAttribute('x2', xe.toFixed(1));
+    ln.setAttribute('y2', y.toFixed(1));
+    ln.setAttribute('opacity', (0.5+Math.random()*0.4).toFixed(2));
+    speedLines.appendChild(ln);
+    setTimeout(() => ln.remove(), 350);
+  }
+
+  updateGauges();
+
+  // elapsed
+  if (state.running && state.startedAt) {
+    const s = Math.floor((now - state.startedAt)/1000);
+    const mm = String(Math.floor(s/60)).padStart(2,'0');
+    const ss = String(s%60).padStart(2,'0');
+    document.getElementById('tElapsed').textContent = `${mm}:${ss}`;
+  }
+
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+/* boot greeting + connect */
+logRaw('===  NEMA17 + TMC2208 + ENCODER  ===','ok');
+logRaw(`Conectando a <span class="v">${WS_URL}</span>…`);
+logRaw('Comandos: + subir / − bajar / R girar / S parar / Z zero');
+wsConnect();
+</script>
+</body>
+</html>
