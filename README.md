@@ -18,7 +18,6 @@ Motorinador es una aplicación web que te permite **controlar y monitorear un mo
 | **Driver TMC2208** | El controlador del motor (modo STEP/DIR) |
 | **Motor NEMA17 17HS4401** | El motor paso a paso |
 | **Encoder E38S6G5-600B-G24N** | El sensor que mide la velocidad real |
-| **4 resistencias de 4.7 kΩ** | Para las señales del encoder (pull-up a 5 V) |
 | **Cable USB** | Para conectar el Arduino a la computadora |
 | **Fuente de poder para el motor** | El driver TMC2208 necesita su propia alimentación |
 
