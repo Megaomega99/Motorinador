@@ -4,12 +4,30 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..models import Params, StatusFrame
+from ..port_detector import list_serial_ports
 from ..serial_link import serial_link
 from ..state import motor_state
 
 router = APIRouter(prefix="/api")
 
 VALID_CMDS = frozenset({"start", "stop", "reverse", "zero_encoder", "e_stop"})
+
+
+@router.get("/ports")
+async def get_ports() -> dict:
+    """Lista los puertos seriales disponibles para diagnóstico multiplataforma."""
+    ports = [
+        {
+            "device": p.device,
+            "description": p.description,
+            "manufacturer": p.manufacturer,
+            "product": p.product,
+            "vid": p.vid,
+            "pid": p.pid,
+        }
+        for p in list_serial_ports()
+    ]
+    return {"connected": serial_link.connected, "ports": ports}
 
 
 @router.get("/state", response_model=StatusFrame)

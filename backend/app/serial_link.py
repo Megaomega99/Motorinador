@@ -11,6 +11,7 @@ import serial_asyncio
 
 from .config import settings
 from .models import Params, StatusFrame, WsError, WsReady, WsStatus
+from .port_detector import describe_available_ports, detect_arduino_port
 from .state import motor_state
 
 logger = logging.getLogger(__name__)
@@ -71,17 +72,33 @@ class SerialLink:
                 await motor_state.broadcast(WsError(msg=f"Serial port disconnected: {exc}"))
                 await asyncio.sleep(settings.serial_reconnect_interval)
 
+    def _resolve_port(self) -> Optional[str]:
+        """Resuelve el puerto a usar: detección automática o puerto fijo."""
+        configured = settings.port.strip()
+        if configured.lower() in {"", "auto"}:
+            return detect_arduino_port()
+        # Puerto fijo: si existe lo usamos; si no, intentamos detectar igualmente.
+        return detect_arduino_port(preferred=configured)
+
     async def _connect_and_read(self) -> None:
-        logger.info("Opening serial port %s @ %d baud", settings.port, settings.baud)
+        port = self._resolve_port()
+        if not port:
+            available = describe_available_ports()
+            raise RuntimeError(
+                f"No se detectó ningún Arduino. Puertos disponibles: {available}. "
+                "Conecta el Arduino por USB o define MOTORINADOR_PORT con el puerto correcto."
+            )
+
+        logger.info("Opening serial port %s @ %d baud", port, settings.baud)
         reader, writer = await serial_asyncio.open_serial_connection(
-            url=settings.port, baudrate=settings.baud
+            url=port, baudrate=settings.baud
         )
         self._writer = writer
         # Wait for Arduino reset after USB connect
         await asyncio.sleep(2.0)
         self._connected = True
         await motor_state.broadcast(WsReady())
-        await motor_state.log_info(f"Serial abierto: {settings.port} @ {settings.baud}")
+        await motor_state.log_info(f"Serial abierto: {port} @ {settings.baud}")
 
         try:
             while True:

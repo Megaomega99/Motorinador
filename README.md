@@ -107,19 +107,22 @@ pip install -r backend/requirements.txt
 
 Esto solo se hace una vez. Después el Arduino recuerda el programa aunque se desconecte.
 
-### 3. Configura el puerto serial (si es necesario)
+### 3. Configura el puerto serial (opcional)
 
-Por defecto el sistema busca el Arduino en `/dev/ttyACM0`. Si tu sistema usa otro puerto (por ejemplo `/dev/ttyACM1` o `/dev/ttyUSB0`), puedes indicárselo con una variable de entorno antes de lanzar:
+**No necesitas configurar nada.** El sistema **detecta automáticamente** el puerto del Arduino en Linux, Windows y macOS — busca dispositivos USB con los identificadores de Arduino y de los conversores USB‑Serial comunes (CH340, FTDI, CP210x, etc.).
 
-```bash
-export MOTORINADOR_PORT=/dev/ttyACM1
-```
+Si tienes varios dispositivos USB conectados y quieres forzar uno específico, puedes hacerlo con una variable de entorno antes de lanzar:
 
-En Windows el puerto se llama diferente, por ejemplo `COM3`:
+| Sistema | Ejemplo |
+|---|---|
+| **Linux** | `export MOTORINADOR_PORT=/dev/ttyACM1` |
+| **macOS** | `export MOTORINADOR_PORT=/dev/cu.usbmodem14101` |
+| **Windows (CMD)** | `set MOTORINADOR_PORT=COM3` |
+| **Windows (PowerShell)** | `$env:MOTORINADOR_PORT="COM3"` |
 
-```bash
-set MOTORINADOR_PORT=COM3
-```
+Para volver a la detección automática: `export MOTORINADOR_PORT=auto` (o simplemente no definir la variable).
+
+> Puedes ver qué puertos detecta el sistema visitando `http://localhost:8000/api/ports` mientras el servidor está corriendo.
 
 ---
 
@@ -189,7 +192,10 @@ La parte inferior muestra en tiempo real todos los mensajes que llegan del Ardui
 ## Solución de problemas
 
 **La luz POWER está roja o apagada**
-→ El Arduino no está conectado o está en el puerto equivocado. Verifica el cable USB y el puerto (`MOTORINADOR_PORT`).
+→ El Arduino no está conectado. Verifica el cable USB. El sistema busca el puerto automáticamente, así que normalmente basta con conectar la placa y esperar un par de segundos. Si sigue sin conectar, visita `http://localhost:8000/api/ports` para ver qué puertos detecta el sistema y, si es necesario, fuerza uno con `MOTORINADOR_PORT`.
+
+**Tengo varios dispositivos USB y elige el equivocado**
+→ Define manualmente el puerto con `MOTORINADOR_PORT` (ver sección "Configura el puerto serial").
 
 **El motor no se mueve aunque POWER esté verde**
 → Verifica que la fuente de alimentación del driver TMC2208 esté encendida.
