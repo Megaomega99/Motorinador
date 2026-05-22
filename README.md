@@ -41,6 +41,20 @@ Arduino           Driver TMC2208
 
 Los pines `MS1` y `MS2` del driver van conectados a `GND` para activar el modo **1/8 de micro-paso**.
 
+### Salidas espejo para osciloscopio / analizador lógico
+
+Tres pines replican en tiempo real las señales internas para que puedas conectar un osciloscopio o analizador lógico sin interferir con el circuito principal:
+
+```
+Arduino           Señal replicada
+───────           ───────────────
+  D9    ────────→  Canal A del encoder  (espejo de D7)
+  D10   ────────→  Canal B del encoder  (espejo de D8)
+  D11   ────────→  STEP al driver       (espejo de D4)
+```
+
+La actualización de D9 y D10 ocurre dentro de las ISRs del encoder (post-debounce), y la de D11 ocurre en el mismo instante que el pulso STEP real.
+
 ### Motor NEMA17 → Driver TMC2208
 
 Conecta las dos bobinas del motor a los terminales `A1/A2` y `B1/B2` del driver siguiendo el esquema de colores del fabricante (normalmente están marcados en el motor o en su hoja de datos).
@@ -74,6 +88,10 @@ Encoder (color)      Arduino / Circuito
  │  D8 ──[4.7kΩ]──5V   ← Canal B (verde)   ←──┤  Encoder
  │  5V ──────────────── Rojo                ←──┤
  │  GND ─────────────── Negro               ←──┘
+ │                                              │
+ │  D9  ───────────────────────────────────────→  Osciloscopio (canal A)
+ │  D10 ───────────────────────────────────────→  Osciloscopio (canal B)
+ │  D11 ───────────────────────────────────────→  Osciloscopio (STEP)
  └──────────────────────────────────────────────┘
           │
         USB

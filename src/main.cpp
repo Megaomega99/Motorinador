@@ -25,7 +25,10 @@
 const uint8_t PIN_STEP  = 4;
 const uint8_t PIN_DIR   = 5;
 const uint8_t PIN_EN    = 6;
-
+// ── Pines Output ─────────────────────────────────────────────
+const uint8_t PIN_ENC_OA  = 9;
+const uint8_t PIN_ENC_OB  = 10;
+const uint8_t PIN_STEP_OUT = 11;
 // ── Pines encoder ────────────────────────────────────────────
 const uint8_t PIN_ENC_A = 7;   // Canal A — interrupción CHANGE
 const uint8_t PIN_ENC_B = 8;   // Canal B — interrupción CHANGE
@@ -85,16 +88,22 @@ static void ISR_encA() {
   const unsigned long now = micros();
   if ((now - lastA_us) < DEBOUNCE_US) return;
   lastA_us = now;
-  if (digitalRead(PIN_ENC_A) == digitalRead(PIN_ENC_B)) encoderCount++;
-  else                                                   encoderCount--;
+  const uint8_t a = digitalRead(PIN_ENC_A);
+  const uint8_t b = digitalRead(PIN_ENC_B);
+  if (a == b) encoderCount++;
+  else        encoderCount--;
+  digitalWrite(PIN_ENC_OA, a);
 }
 
 static void ISR_encB() {
   const unsigned long now = micros();
   if ((now - lastB_us) < DEBOUNCE_US) return;
   lastB_us = now;
-  if (digitalRead(PIN_ENC_A) == digitalRead(PIN_ENC_B)) encoderCount--;
-  else                                                   encoderCount++;
+  const uint8_t a = digitalRead(PIN_ENC_A);
+  const uint8_t b = digitalRead(PIN_ENC_B);
+  if (a == b) encoderCount--;
+  else        encoderCount++;
+  digitalWrite(PIN_ENC_OB, b);
 }
 
 // =============================================================
@@ -189,6 +198,11 @@ void setup() {
   delay(200);
   digitalWrite(PIN_EN, LOW);
 
+  // Salidas espejo para osciloscopio / analizador lógico
+  pinMode(PIN_ENC_OA,  OUTPUT);  digitalWrite(PIN_ENC_OA,  LOW);
+  pinMode(PIN_ENC_OB,  OUTPUT);  digitalWrite(PIN_ENC_OB,  LOW);
+  pinMode(PIN_STEP_OUT, OUTPUT); digitalWrite(PIN_STEP_OUT, LOW);
+
   // Encoder — pull-up interno activa el canal idle en HIGH
   pinMode(PIN_ENC_A, INPUT_PULLUP);
   pinMode(PIN_ENC_B, INPUT_PULLUP);
@@ -233,7 +247,8 @@ void loop() {
         // EN=HIGH libera la corriente de holding y reduce calor
         digitalWrite(PIN_EN, motorEnabled ? LOW : HIGH);
         if (!motorEnabled) {
-          digitalWrite(PIN_STEP, LOW);
+          digitalWrite(PIN_STEP,     LOW);
+          digitalWrite(PIN_STEP_OUT, LOW);
           stepPinHigh = false;
         }
         printStatus();
@@ -254,7 +269,8 @@ void loop() {
     const unsigned long half = halfPeriodUs(targetRPM);
     if ((now_us - lastStepTime) >= half) {
       stepPinHigh  = !stepPinHigh;
-      digitalWrite(PIN_STEP, stepPinHigh ? HIGH : LOW);
+      digitalWrite(PIN_STEP,     stepPinHigh ? HIGH : LOW);
+      digitalWrite(PIN_STEP_OUT, stepPinHigh ? HIGH : LOW);
       lastStepTime += half;   // += en lugar de = para absorber la latencia del loop
     }
   }
