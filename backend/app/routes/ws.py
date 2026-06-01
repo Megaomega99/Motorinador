@@ -91,6 +91,8 @@ async def _handle_client_message(raw: str) -> None:
                 await serial_link.cmd_zero_encoder()
             case "e_stop":
                 await serial_link.cmd_e_stop()
+            case "toggle_pid":
+                await serial_link.cmd_toggle_pid()
 
     elif msg_type == "set_target":
         msg = SetTargetMessage.model_validate(data)
@@ -100,7 +102,6 @@ async def _handle_client_message(raw: str) -> None:
 
     elif msg_type == "set_params":
         msg = SetParamsMessage.model_validate(data)
-        # Validar que radius_cm > 0 para evitar división por cero en cálculos de velocidad
         if msg.data.radius_cm <= 0:
             raise ValueError("radius_cm debe ser > 0")
         if msg.data.rpm_step <= 0:

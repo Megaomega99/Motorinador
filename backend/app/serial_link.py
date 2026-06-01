@@ -16,29 +16,59 @@ from .state import motor_state
 
 logger = logging.getLogger(__name__)
 
-_STATUS_RE = re.compile(
-    r"Target:\s*([-+]?\d+\.?\d*)\s*RPM\s*\|\s*"
-    r"Real:\s*([-+]?\d+\.?\d*)\s*RPM\s*\|\s*"
-    r"Ang:\s*([-+]?\d+\.?\d*)\s*deg\s*\|\s*"
-    r"Dir:\s*(FWD|REV)\s*\|\s*"
+# [PI]  Tgt:30.0RPM  Meas:28.5RPM  Err:1.5  Ctrl:30.2RPM  Ang:185.4deg  Dir:FWD  CORRIENDO
+_STATUS_PI_RE = re.compile(
+    r"\[PI\]\s+Tgt:([-+]?\d+\.?\d*)RPM\s+"
+    r"Meas:([-+]?\d+\.?\d*)RPM\s+"
+    r"Err:([-+]?\d+\.?\d*)\s+"
+    r"Ctrl:([-+]?\d+\.?\d*)RPM\s+"
+    r"Ang:([-+]?\d+\.?\d*)deg\s+"
+    r"Dir:(FWD|REV)\s+"
     r"(CORRIENDO|PARADO)"
 )
 
-VALID_CMDS = frozenset({"+", "-", "r", "s", "z"})
+# [LIBRE]  Tgt:30.0RPM  Real:28.5RPM  Ang:185.4deg  Dir:FWD  CORRIENDO
+_STATUS_LIBRE_RE = re.compile(
+    r"\[LIBRE\]\s+Tgt:([-+]?\d+\.?\d*)RPM\s+"
+    r"Real:([-+]?\d+\.?\d*)RPM\s+"
+    r"Ang:([-+]?\d+\.?\d*)deg\s+"
+    r"Dir:(FWD|REV)\s+"
+    r"(CORRIENDO|PARADO)"
+)
+
+VALID_CMDS = frozenset({"+", "-", "r", "s", "z", "c"})
 
 
 def _parse_line(line: str) -> Optional[StatusFrame]:
-    m = _STATUS_RE.search(line)
-    if not m:
-        return None
-    return StatusFrame(
-        target_rpm=float(m.group(1)),
-        real_rpm=float(m.group(2)),
-        angle_deg=float(m.group(3)),
-        dir=m.group(4),
-        running=m.group(5) == "CORRIENDO",
-        ts=time.time(),
-    )
+    m = _STATUS_PI_RE.search(line)
+    if m:
+        ctrl = float(m.group(4))
+        return StatusFrame(
+            use_pid=True,
+            target_rpm=float(m.group(1)),
+            real_rpm=float(m.group(2)),
+            measured_rpm=float(m.group(2)),
+            pi_error=float(m.group(3)),
+            control_rpm=ctrl,
+            angle_deg=float(m.group(5)),
+            dir=m.group(6),
+            running=m.group(7) == "CORRIENDO",
+            ts=time.time(),
+        )
+
+    m = _STATUS_LIBRE_RE.search(line)
+    if m:
+        return StatusFrame(
+            use_pid=False,
+            target_rpm=float(m.group(1)),
+            real_rpm=float(m.group(2)),
+            angle_deg=float(m.group(3)),
+            dir=m.group(4),
+            running=m.group(5) == "CORRIENDO",
+            ts=time.time(),
+        )
+
+    return None
 
 
 def _enrich(frame: StatusFrame, params: Params) -> StatusFrame:
@@ -77,7 +107,6 @@ class SerialLink:
         configured = settings.port.strip()
         if configured.lower() in {"", "auto"}:
             return detect_arduino_port()
-        # Puerto fijo: si existe lo usamos; si no, intentamos detectar igualmente.
         return detect_arduino_port(preferred=configured)
 
     async def _connect_and_read(self) -> None:
@@ -117,7 +146,8 @@ class SerialLink:
         if frame:
             frame = _enrich(frame, motor_state.params)
             motor_state.last_status = frame
-            self._last_target = frame.target_rpm   # siempre en sync con el firmware
+            motor_state.use_pid = frame.use_pid
+            self._last_target = frame.target_rpm
             await motor_state.broadcast(WsStatus(data=frame))
         else:
             level = "warn" if "error" in line.lower() else "info"
@@ -170,18 +200,15 @@ class SerialLink:
 
     async def cmd_start(self) -> None:
         status = motor_state.last_status
-        # Si no hay status aún, asume parado y envía toggle
         if status is None or not status.running:
             await self.send("s")
 
     async def cmd_stop(self) -> None:
         status = motor_state.last_status
-        # Si no hay status aún, asume corriendo y envía toggle
         if status is None or status.running:
             await self.send("s")
 
     async def cmd_e_stop(self) -> None:
-        # E-STOP es sagrado: para siempre, sin importar el estado conocido
         status = motor_state.last_status
         if status is None or status.running:
             await self.send("s")
@@ -191,6 +218,10 @@ class SerialLink:
 
     async def cmd_zero_encoder(self) -> None:
         await self.send("z")
+
+    async def cmd_toggle_pid(self) -> None:
+        await self.send("c")
+
 
 
 serial_link = SerialLink()

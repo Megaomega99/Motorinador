@@ -15,6 +15,11 @@ class StatusFrame(BaseModel):
     ts: float = Field(default_factory=time.time)
     omega_rad_s: Optional[float] = None
     v_m_s: Optional[float] = None
+    # Controlador PI
+    use_pid: bool = False
+    measured_rpm: Optional[float] = None
+    pi_error: Optional[float] = None
+    control_rpm: Optional[float] = None
 
 
 class Params(BaseModel):
@@ -49,7 +54,7 @@ class WsParams(BaseModel):
 
 class WsReady(BaseModel):
     type: Literal["ready"] = "ready"
-    firmware: str = "NEMA17 + TMC2208 + ENCODER"
+    firmware: str = "NEMA17 + TMC2208 + ENCODER + PI"
 
 
 class WsError(BaseModel):
@@ -64,7 +69,10 @@ WsMessage = Union[WsStatus, WsLog, WsParams, WsReady, WsError]
 
 class CmdMessage(BaseModel):
     type: Literal["cmd"] = "cmd"
-    cmd: Literal["start", "stop", "reverse", "zero_encoder", "e_stop"]
+    cmd: Literal[
+        "start", "stop", "reverse", "zero_encoder", "e_stop",
+        "toggle_pid",
+    ]
 
 
 class SetTargetMessage(BaseModel):

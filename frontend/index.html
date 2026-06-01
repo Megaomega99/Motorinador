@@ -9,10 +9,10 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700;9..144,900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg:          #f6efe1;       /* cedar shavings cream */
+    --bg:          #f6efe1;
     --bg-2:        #ecdfc6;
     --paper:       #fffaf0;
-    --ink:         #2a1c10;       /* dark roasted brown */
+    --ink:         #2a1c10;
     --ink-soft:    #5b4327;
     --line:        #d8c8a8;
     --line-soft:   #e6d8ba;
@@ -24,6 +24,8 @@
     --red-deep:    #a01a11;
     --wood:        #b9854b;
     --wood-dark:   #6f4a23;
+    --pid:         #3a6ea8;   /* azul PD */
+    --pid-light:   #d0e4f7;
     --shadow:      0 1px 0 #fff7e2 inset, 0 1px 2px rgba(80,50,15,.08), 0 8px 24px -16px rgba(80,50,15,.25);
   }
   * { box-sizing: border-box; }
@@ -38,7 +40,6 @@
     min-height: 100vh;
     overflow-x: hidden;
   }
-  /* Cedar shavings texture */
   body::before {
     content: "";
     position: fixed; inset: 0;
@@ -55,55 +56,35 @@
 
   /* ────────── HEADER ────────── */
   header.topbar {
-    position: relative;
-    z-index: 5;
+    position: relative; z-index: 5;
     display: flex; align-items: center; justify-content: space-between;
     padding: 22px 40px 14px;
   }
-  .brand-mark {
-    display: flex; align-items: center; gap: 14px;
-  }
+  .brand-mark { display: flex; align-items: center; gap: 14px; }
   .brand-glyph {
     width: 44px; height: 44px;
     border-radius: 12px;
     background: linear-gradient(135deg, #ffd089, var(--orange));
     box-shadow: var(--shadow);
     display: grid; place-items: center;
-    position: relative;
   }
   .brand-glyph svg { width: 28px; height: 28px; }
   .brand-words .name {
-    font-family: "Fraunces", serif;
-    font-weight: 900;
-    font-size: 28px;
-    letter-spacing: -0.02em;
-    line-height: 1;
-    color: var(--ink);
+    font-family: "Fraunces", serif; font-weight: 900;
+    font-size: 28px; letter-spacing: -0.02em; line-height: 1; color: var(--ink);
   }
-  .brand-words .name em {
-    font-style: italic;
-    color: var(--orange);
-    font-weight: 600;
-  }
+  .brand-words .name em { font-style: italic; color: var(--orange); font-weight: 600; }
   .brand-words .tag {
     font-family: "IBM Plex Mono", monospace;
-    font-size: 10px;
-    letter-spacing: 0.22em;
-    color: var(--ink-soft);
-    text-transform: uppercase;
-    margin-top: 4px;
+    font-size: 10px; letter-spacing: 0.22em; color: var(--ink-soft);
+    text-transform: uppercase; margin-top: 4px;
   }
-
-  /* Top-right logo  */
   .app-logo {
     display: flex; align-items: center; gap: 12px;
     padding: 8px 14px 8px 8px;
-    background: var(--paper);
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    box-shadow: var(--shadow);
-    cursor: pointer;
-    user-select: none;
+    background: var(--paper); border: 1px solid var(--line);
+    border-radius: 999px; box-shadow: var(--shadow);
+    cursor: pointer; user-select: none;
     transition: transform .15s ease;
   }
   .app-logo:hover { transform: translateY(-1px); }
@@ -117,49 +98,35 @@
     padding: 8px 40px 40px;
     align-items: start;
   }
-
   .panel {
-    background: var(--paper);
-    border: 1px solid var(--line);
-    border-radius: 18px;
-    box-shadow: var(--shadow);
-    padding: 22px;
+    background: var(--paper); border: 1px solid var(--line);
+    border-radius: 18px; box-shadow: var(--shadow); padding: 22px;
   }
   .panel h2 {
-    font-family: "Fraunces", serif;
-    font-weight: 700;
-    font-size: 18px;
-    margin: 0 0 4px;
-    letter-spacing: -0.01em;
+    font-family: "Fraunces", serif; font-weight: 700;
+    font-size: 18px; margin: 0 0 4px; letter-spacing: -0.01em;
   }
   .panel .sub {
     font-family: "IBM Plex Mono", monospace;
     font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
-    color: var(--ink-soft);
-    margin-bottom: 16px;
+    color: var(--ink-soft); margin-bottom: 16px;
   }
 
   /* ── form ── */
   .field { margin-bottom: 14px; }
   .field label {
     display: flex; justify-content: space-between; align-items: baseline;
-    font-size: 12px; font-weight: 600; color: var(--ink);
-    margin-bottom: 6px;
+    font-size: 12px; font-weight: 600; color: var(--ink); margin-bottom: 6px;
   }
   .field label .unit {
     font-family: "IBM Plex Mono", monospace;
-    font-size: 10px; color: var(--ink-soft);
-    letter-spacing: 0.1em;
+    font-size: 10px; color: var(--ink-soft); letter-spacing: 0.1em;
   }
   .field input[type="number"], .field input[type="text"], .field select {
-    width: 100%;
-    background: #fdf6e6;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 9px 12px;
-    font: 500 14px "IBM Plex Mono", monospace;
-    color: var(--ink);
-    outline: none;
+    width: 100%; background: #fdf6e6;
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 9px 12px; font: 500 14px "IBM Plex Mono", monospace;
+    color: var(--ink); outline: none;
     transition: border-color .15s, box-shadow .15s;
   }
   .field input:focus, .field select:focus {
@@ -173,22 +140,22 @@
     -webkit-appearance: none; appearance: none;
     width: 100%; height: 6px;
     background: linear-gradient(90deg, var(--orange) var(--p,30%), var(--line-soft) var(--p,30%));
-    border-radius: 999px;
-    outline: none;
-    margin: 8px 0 4px;
+    border-radius: 999px; outline: none; margin: 8px 0 4px;
   }
   .field input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 18px; height: 18px; border-radius: 999px;
-    background: var(--paper);
-    border: 2px solid var(--orange);
-    cursor: pointer;
-    box-shadow: 0 2px 4px rgba(80,50,15,.2);
+    background: var(--paper); border: 2px solid var(--orange);
+    cursor: pointer; box-shadow: 0 2px 4px rgba(80,50,15,.2);
   }
   .field input[type="range"]::-moz-range-thumb {
     width: 18px; height: 18px; border-radius: 999px;
     background: var(--paper); border: 2px solid var(--orange); cursor: pointer;
   }
+  .field input[type="range"]:disabled {
+    opacity: .35; cursor: not-allowed;
+  }
+  .field input[type="range"]:disabled::-webkit-slider-thumb { cursor: not-allowed; }
 
   /* segmented */
   .seg {
@@ -201,29 +168,44 @@
     padding: 8px 0;
     font: 600 12px "IBM Plex Mono", monospace;
     letter-spacing: 0.12em; text-transform: uppercase;
-    color: var(--ink-soft);
-    border-radius: 8px; cursor: pointer;
+    color: var(--ink-soft); border-radius: 8px; cursor: pointer;
     transition: all .15s;
   }
   .seg button.on {
     background: var(--ink); color: #fff7e2;
     box-shadow: 0 2px 6px rgba(80,50,15,.25);
   }
+  /* PID mode active variant */
+  .seg.pid-seg button.on {
+    background: var(--pid); color: #fff;
+    box-shadow: 0 2px 6px rgba(58,110,168,.35);
+  }
+
+  /* PID info card */
+  .pid-card {
+    background: var(--pid-light);
+    border: 1px solid #a8c8e8;
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px; line-height: 2;
+    color: var(--ink-soft);
+  }
+  .pid-card b { color: var(--ink); }
+  .pid-card .pid-val-target { color: var(--pid); }
+  .pid-card .pid-val-err    { color: var(--orange); }
+  .pid-card .pid-val-out    { color: var(--leaf); }
 
   /* ────────── STAGE (center) ────────── */
   .stage {
     background:
       radial-gradient(circle at 50% 110%, rgba(232,96,31,.15) 0%, transparent 55%),
       linear-gradient(180deg, #fffaf0 0%, #fdf2dc 100%);
-    border: 1px solid var(--line);
-    border-radius: 24px;
-    box-shadow: var(--shadow);
-    padding: 24px 24px 28px;
-    position: relative;
-    overflow: hidden;
+    border: 1px solid var(--line); border-radius: 24px;
+    box-shadow: var(--shadow); padding: 24px 24px 28px;
+    position: relative; overflow: hidden;
   }
   .stage::before {
-    /* corner ticks (HUD) */
     content: "";
     position: absolute; inset: 12px;
     background:
@@ -235,28 +217,26 @@
       linear-gradient(var(--ink-soft),var(--ink-soft)) left bottom/1px 14px no-repeat,
       linear-gradient(var(--ink-soft),var(--ink-soft)) right bottom/14px 1px no-repeat,
       linear-gradient(var(--ink-soft),var(--ink-soft)) right bottom/1px 14px no-repeat;
-    opacity: .35;
-    pointer-events: none;
+    opacity: .35; pointer-events: none;
   }
   .stage-head {
     display: flex; justify-content: space-between; align-items: center;
     margin-bottom: 10px;
   }
   .stage-head .title {
-    font-family: "Fraunces", serif; font-weight: 700; font-size: 20px;
-    letter-spacing: -0.01em;
+    font-family: "Fraunces", serif; font-weight: 700;
+    font-size: 20px; letter-spacing: -0.01em;
   }
   .stage-head .title em { font-style: italic; color: var(--orange); }
+  .stage-head .title em.pid-em { color: var(--pid); }
   .stage-head .dot {
     display: inline-flex; align-items: center; gap: 8px;
     font-family: "IBM Plex Mono", monospace; font-size: 11px;
-    letter-spacing: 0.16em; color: var(--ink-soft);
-    text-transform: uppercase;
+    letter-spacing: 0.16em; color: var(--ink-soft); text-transform: uppercase;
   }
   .stage-head .dot::before {
     content: ""; width: 8px; height: 8px; border-radius: 999px;
-    background: var(--ink-soft);
-    box-shadow: 0 0 0 0 currentColor;
+    background: var(--ink-soft); box-shadow: 0 0 0 0 currentColor;
   }
   .stage-head.live .dot { color: var(--leaf); }
   .stage-head.live .dot::before {
@@ -270,83 +250,68 @@
   }
 
   /* Wheel scene */
-  .scene {
-    display: flex; justify-content: center;
-    margin: 6px 0 12px;
-    position: relative;
-  }
+  .scene { display: flex; justify-content: center; margin: 6px 0 12px; position: relative; }
   .scene svg { display: block; width: 520px; height: 380px; }
 
   /* Gauges row */
   .gauges {
     display: grid; grid-template-columns: 1fr 1fr 1fr;
-    gap: 14px;
-    margin-top: 8px;
+    gap: 14px; margin-top: 8px;
   }
   .gauge {
-    background: #fffaf0;
-    border: 1px solid var(--line-soft);
-    border-radius: 14px;
-    padding: 14px 16px;
-    position: relative;
-    overflow: hidden;
+    background: #fffaf0; border: 1px solid var(--line-soft);
+    border-radius: 14px; padding: 14px 16px;
+    position: relative; overflow: hidden;
+    transition: border-color .3s;
   }
   .gauge .lbl {
     font-family: "IBM Plex Mono", monospace;
-    font-size: 10px; letter-spacing: 0.18em;
-    text-transform: uppercase; color: var(--ink-soft);
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-soft);
+    transition: color .3s;
   }
   .gauge .val {
-    font-family: "Fraunces", serif;
-    font-weight: 700;
-    font-size: 36px; line-height: 1.1;
-    letter-spacing: -0.02em;
-    margin-top: 4px;
-    font-variant-numeric: tabular-nums;
+    font-family: "Fraunces", serif; font-weight: 700;
+    font-size: 36px; line-height: 1.1; letter-spacing: -0.02em;
+    margin-top: 4px; font-variant-numeric: tabular-nums;
+    transition: color .3s;
   }
   .gauge .val small {
     font: 500 14px "IBM Plex Mono", monospace;
-    color: var(--ink-soft); margin-left: 4px;
-    letter-spacing: 0.04em;
+    color: var(--ink-soft); margin-left: 4px; letter-spacing: 0.04em;
   }
   .gauge.target .val { color: var(--orange); }
   .gauge.real   .val { color: var(--ink); }
   .gauge.linear .val { color: var(--wood-dark); }
+  /* PID mode gauge overrides */
+  .gauge.target.pid-mode .val  { color: var(--pid); }
+  .gauge.target.pid-mode       { border-color: #a8c8e8; }
+  .gauge.linear.pid-mode .val  { color: var(--orange); }
 
   /* Big red button */
   .start-row { display: flex; align-items: center; gap: 18px; margin-top: 16px; }
   .ledpanel {
-    flex: 1;
-    display: flex; gap: 10px; align-items: center;
-    padding: 12px 14px;
-    background: #fffaf0;
-    border: 1px solid var(--line-soft);
-    border-radius: 14px;
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 11px; letter-spacing: 0.12em;
-    color: var(--ink-soft);
-    text-transform: uppercase;
+    flex: 1; display: flex; gap: 10px; align-items: center;
+    padding: 12px 14px; background: #fffaf0;
+    border: 1px solid var(--line-soft); border-radius: 14px;
+    font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    letter-spacing: 0.12em; color: var(--ink-soft); text-transform: uppercase;
   }
   .led {
     width: 10px; height: 10px; border-radius: 999px;
-    background: var(--line);
-    box-shadow: inset 0 0 0 1px rgba(0,0,0,.15);
+    background: var(--line); box-shadow: inset 0 0 0 1px rgba(0,0,0,.15);
   }
-  .led.on  { background: var(--leaf); box-shadow: 0 0 8px rgba(106,138,62,.7), inset 0 0 0 1px rgba(0,0,0,.15); }
+  .led.on   { background: var(--leaf); box-shadow: 0 0 8px rgba(106,138,62,.7), inset 0 0 0 1px rgba(0,0,0,.15); }
   .led.warn { background: var(--amber); box-shadow: 0 0 8px rgba(241,176,74,.7); }
+  .led.pid  { background: var(--pid); box-shadow: 0 0 8px rgba(58,110,168,.7), inset 0 0 0 1px rgba(0,0,0,.15); }
 
   .bigbtn {
-    position: relative;
-    appearance: none; border: 0;
-    width: 158px; height: 96px;
-    border-radius: 22px;
-    background:
-      radial-gradient(circle at 35% 30%, #ff6a5c 0%, var(--red) 45%, var(--red-deep) 100%);
-    color: #fff7e2;
-    cursor: pointer;
+    position: relative; appearance: none; border: 0;
+    width: 158px; height: 96px; border-radius: 22px;
+    background: radial-gradient(circle at 35% 30%, #ff6a5c 0%, var(--red) 45%, var(--red-deep) 100%);
+    color: #fff7e2; cursor: pointer;
     font: 800 18px "Fraunces", serif;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    letter-spacing: 0.04em; text-transform: uppercase;
     box-shadow:
       inset 0 -6px 0 rgba(0,0,0,.25),
       inset 0 2px 0 rgba(255,255,255,.25),
@@ -356,10 +321,8 @@
   }
   .bigbtn::before {
     content: "";
-    position: absolute; inset: 6px;
-    border-radius: 18px;
-    border: 2px dashed rgba(255,255,255,.25);
-    pointer-events: none;
+    position: absolute; inset: 6px; border-radius: 18px;
+    border: 2px dashed rgba(255,255,255,.25); pointer-events: none;
   }
   .bigbtn:hover { filter: brightness(1.05); }
   .bigbtn:active {
@@ -371,8 +334,7 @@
       0 6px 10px -4px rgba(160,26,17,.5);
   }
   .bigbtn.running {
-    background:
-      radial-gradient(circle at 35% 30%, #2f4a1e 0%, #3d6024 45%, #243a13 100%);
+    background: radial-gradient(circle at 35% 30%, #2f4a1e 0%, #3d6024 45%, #243a13 100%);
     box-shadow:
       inset 0 -6px 0 rgba(0,0,0,.3),
       inset 0 2px 0 rgba(255,255,255,.18),
@@ -382,16 +344,12 @@
   .bigbtn .lbl { display: block; font-size: 11px; font-family: "IBM Plex Mono", monospace; letter-spacing: 0.22em; opacity: .85; }
   .bigbtn .action { display: block; font-size: 22px; line-height: 1.1; margin-top: 2px; }
 
-  /* ────────── RIGHT PANEL: serial log ────────── */
+  /* ────────── RIGHT PANEL ────────── */
   .panel.right { padding-bottom: 14px; }
   .log {
-    background: #1c130a;
-    color: #f1d6a3;
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 11px;
-    line-height: 1.55;
-    padding: 12px 14px;
-    border-radius: 12px;
+    background: #1c130a; color: #f1d6a3;
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; line-height: 1.55;
+    padding: 12px 14px; border-radius: 12px;
     height: 280px; overflow: auto;
     border: 1px solid #2b1d10;
     box-shadow: inset 0 0 0 1px rgba(255,200,120,.05);
@@ -401,12 +359,12 @@
   .log .warn { color: var(--amber); }
   .log .err { color: #ff7a6a; }
   .log .v   { color: #ffb56a; }
+  .log .pid { color: #82baf0; }
 
   .pillrow { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
   .pill {
     appearance: none; border: 1px solid var(--line);
-    background: #fdf6e6;
-    border-radius: 999px;
+    background: #fdf6e6; border-radius: 999px;
     padding: 6px 10px;
     font: 600 10px "IBM Plex Mono", monospace;
     letter-spacing: 0.14em; text-transform: uppercase;
@@ -414,6 +372,7 @@
   }
   .pill:hover { background: #f7ead0; }
   .pill.danger { color: var(--red); border-color: rgba(217,43,31,.4); }
+  .pill.pid-pill { color: var(--pid); border-color: rgba(58,110,168,.4); }
 
   /* footer strip */
   .footstrip {
@@ -429,20 +388,16 @@
     content: ""; width: 28px; height: 1px; background: var(--ink-soft); opacity: .4;
   }
 
-  /* divider */
-  .divider {
-    height: 1px; background: var(--line-soft); margin: 14px 0;
-  }
+  /* divider / group title */
+  .divider { height: 1px; background: var(--line-soft); margin: 14px 0; }
   .group-title {
     font-family: "IBM Plex Mono", monospace;
     font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
-    color: var(--orange);
-    margin-bottom: 10px;
+    color: var(--orange); margin-bottom: 10px;
     display: flex; align-items: center; gap: 8px;
   }
-  .group-title::after {
-    content: ""; flex: 1; height: 1px; background: var(--line-soft);
-  }
+  .group-title::after { content: ""; flex: 1; height: 1px; background: var(--line-soft); }
+  .group-title.pid-group { color: var(--pid); }
 </style>
 </head>
 <body>
@@ -450,7 +405,6 @@
 <header class="topbar">
   <div class="brand-mark">
     <div class="brand-glyph">
-      <!-- spinning wheel glyph -->
       <svg viewBox="0 0 32 32" fill="none">
         <circle cx="16" cy="16" r="13" stroke="#2a1c10" stroke-width="2"/>
         <circle cx="16" cy="16" r="2" fill="#2a1c10"/>
@@ -468,11 +422,9 @@
     </div>
     <div class="brand-words">
       <div class="name">Motorin<em>ador</em></div>
-      <div class="tag">NEMA17 · TMC2208 · ENCODER X4</div>
+      <div class="tag">NEMA17 · TMC2208 · ENCODER X4 · PI-IMC</div>
     </div>
   </div>
-
-  <!-- Top-right logo (5-click for easter egg) -->
   <div class="app-logo" title="Megaomega">
     <img src="uploads/noBgColor.png" alt="Megaomega" style="height:38px;width:auto;display:block;">
   </div>
@@ -484,16 +436,39 @@
     <h2>Parámetros</h2>
     <div class="sub">Control · Encoder · Mecánica</div>
 
-    <div class="group-title">Velocidad objetivo</div>
-    <div class="field">
-      <label>Target RPM <span class="unit" id="rpmUnit">30 rpm</span></label>
-      <input id="rpm" type="range" min="5" max="120" step="5" value="30">
+    <!-- ── Modo de control ── -->
+    <div class="group-title" id="modeGroupTitle">Modo de Control</div>
+    <div class="seg pid-seg" id="modeSeg">
+      <button data-v="libre" class="on">⚙ Lazo Abierto</button>
+      <button data-v="pid">⊕ Lazo PI</button>
     </div>
-    <div class="field">
-      <label>Sentido de giro</label>
-      <div class="seg" id="dirSeg">
-        <button data-v="fwd" class="on">↻ Adelante</button>
-        <button data-v="rev">↺ Reversa</button>
+
+    <!-- ── Controles modo LIBRE ── -->
+    <div id="libreControls">
+      <div class="divider"></div>
+      <div class="group-title">Velocidad objetivo</div>
+      <div class="field">
+        <label>Target RPM <span class="unit" id="rpmUnit">30 rpm</span></label>
+        <input id="rpm" type="range" min="5" max="120" step="5" value="30">
+      </div>
+      <div class="field">
+        <label>Sentido de giro</label>
+        <div class="seg" id="dirSeg">
+          <button data-v="fwd" class="on">↻ Adelante</button>
+          <button data-v="rev">↺ Reversa</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Estado modo PID (oculto en libre) ── -->
+    <div id="pidControls" style="display:none">
+      <div class="divider"></div>
+      <div class="group-title pid-group">Estado PI · IMC</div>
+      <div class="pid-card">
+        <div>Tgt RPM &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b class="pid-val-target" id="piTgtRpm">0.0</b> <span style="opacity:.6">RPM</span></div>
+        <div>Meas RPM &nbsp;&nbsp;&nbsp;&nbsp;<b id="piMeas">0.0</b> <span style="opacity:.6">RPM</span></div>
+        <div>Error &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b class="pid-val-err" id="piErr">0.0</b> <span style="opacity:.6">RPM</span></div>
+        <div>Ctrl RPM &nbsp;&nbsp;&nbsp;&nbsp;<b class="pid-val-out" id="piCtrl">0.0</b> <span style="opacity:.6">RPM</span></div>
       </div>
     </div>
 
@@ -534,7 +509,7 @@
 
     <div class="pillrow">
       <button class="pill" data-cmd="z">Z · Reset encoder</button>
-      <button class="pill" data-cmd="r">R · Invertir</button>
+      <button class="pill" id="pillReverse" data-cmd="r">R · Invertir</button>
       <button class="pill danger" data-cmd="estop">E-STOP</button>
     </div>
   </section>
@@ -542,7 +517,7 @@
   <!-- ───────── CENTER: hamster wheel stage ───────── -->
   <section class="stage">
     <div class="stage-head" id="stageHead">
-      <div class="title">El <em>hámster</em> corre en su rueda</div>
+      <div class="title" id="stageTitle">El <em>hámster</em> corre en su rueda</div>
       <div class="dot" id="liveDot">EN ESPERA</div>
     </div>
 
@@ -570,32 +545,24 @@
           </pattern>
         </defs>
 
-        <!-- floor / shavings -->
         <rect x="0" y="320" width="520" height="60" fill="url(#floor)"/>
         <ellipse cx="260" cy="328" rx="180" ry="14" fill="rgba(80,50,15,.12)"/>
 
-        <!-- stand -->
         <g>
           <rect x="60"  y="180" width="14" height="148" rx="6" fill="url(#standGrad)"/>
           <rect x="446" y="180" width="14" height="148" rx="6" fill="url(#standGrad)"/>
           <rect x="50"  y="320" width="34" height="14" rx="4" fill="#7a4a1f"/>
           <rect x="436" y="320" width="34" height="14" rx="4" fill="#7a4a1f"/>
-          <!-- axle -->
           <rect x="66" y="178" width="388" height="6" rx="3" fill="#5a3a1a"/>
         </g>
 
-        <!-- WHEEL: spinning group -->
         <g id="wheel" transform="translate(260 180)">
-          <!-- outer rim -->
           <circle r="138" fill="none" stroke="url(#wheelMetal)" stroke-width="10"/>
           <circle r="138" fill="none" stroke="#5a3a1a" stroke-width="1" opacity=".4"/>
           <circle r="128" fill="none" stroke="#5a3a1a" stroke-width="1" opacity=".25"/>
-          <!-- rungs -->
           <g id="rungs" stroke="#9c6c34" stroke-width="3" stroke-linecap="round" opacity=".85"></g>
-          <!-- hub -->
           <circle r="14" fill="#3a2412"/>
           <circle r="6"  fill="#f1b04a"/>
-          <!-- spokes -->
           <g stroke="#a78146" stroke-width="2" opacity=".75">
             <line x1="0" y1="-128" x2="0" y2="128"/>
             <line x1="-128" y1="0" x2="128" y2="0"/>
@@ -604,43 +571,23 @@
           </g>
         </g>
 
-        <!-- MOUSE — anchored at bottom of wheel, NOT rotating -->
         <g id="mouse" transform="translate(260 295)">
-          <!-- shadow -->
           <ellipse cx="0" cy="22" rx="42" ry="5" fill="rgba(80,50,15,.18)"/>
-          <!-- tail -->
           <path id="mouseTail" d="M -34 4 q -22 -8 -38 6"
                 fill="none" stroke="#c08458" stroke-width="3" stroke-linecap="round"/>
-          <!-- back legs -->
-          <g id="legBackL">
-            <ellipse cx="-12" cy="14" rx="6" ry="9" fill="#a07440"/>
-          </g>
-          <g id="legBackR">
-            <ellipse cx="8" cy="14" rx="6" ry="9" fill="#a07440"/>
-          </g>
-          <!-- body -->
+          <g id="legBackL"><ellipse cx="-12" cy="14" rx="6" ry="9" fill="#a07440"/></g>
+          <g id="legBackR"><ellipse cx="8"   cy="14" rx="6" ry="9" fill="#a07440"/></g>
           <ellipse cx="-6" cy="-2" rx="36" ry="22" fill="url(#mouseFur)"/>
-          <!-- belly -->
-          <ellipse cx="-4" cy="7" rx="22" ry="11" fill="#fff5dc" opacity=".8"/>
-          <!-- front legs -->
-          <g id="legFrontL">
-            <ellipse cx="18" cy="12" rx="4" ry="7" fill="#8a5c2a"/>
-          </g>
-          <g id="legFrontR">
-            <ellipse cx="26" cy="14" rx="4" ry="7" fill="#8a5c2a"/>
-          </g>
-          <!-- head -->
+          <ellipse cx="-4" cy="7"  rx="22" ry="11" fill="#fff5dc" opacity=".8"/>
+          <g id="legFrontL"><ellipse cx="18" cy="12" rx="4" ry="7" fill="#8a5c2a"/></g>
+          <g id="legFrontR"><ellipse cx="26" cy="14" rx="4" ry="7" fill="#8a5c2a"/></g>
           <g id="mouseHead" transform="translate(28 -6)">
             <ellipse cx="0" cy="0" rx="18" ry="15" fill="url(#mouseFur)"/>
-            <!-- ear -->
             <circle cx="-4" cy="-12" r="7" fill="#a07440"/>
             <circle cx="-4" cy="-12" r="4" fill="#f0b3a0"/>
-            <!-- eye -->
-            <circle cx="6" cy="-3" r="2.4" fill="#2a1c10"/>
+            <circle cx="6"  cy="-3"  r="2.4" fill="#2a1c10"/>
             <circle cx="6.7" cy="-3.7" r=".8" fill="#fff"/>
-            <!-- nose -->
-            <circle cx="16" cy="2" r="1.8" fill="#b14a3a"/>
-            <!-- whiskers -->
+            <circle cx="16" cy="2"  r="1.8" fill="#b14a3a"/>
             <g stroke="#5b4327" stroke-width=".8" opacity=".7">
               <line x1="14" y1="3" x2="22" y2="6"/>
               <line x1="14" y1="3" x2="22" y2="3"/>
@@ -649,23 +596,22 @@
           </g>
         </g>
 
-        <!-- speed lines -->
         <g id="speedLines" stroke="#e8601f" stroke-width="2" stroke-linecap="round" opacity="0"></g>
       </svg>
     </div>
 
     <div class="gauges">
-      <div class="gauge target">
-        <div class="lbl">Velocidad objetivo</div>
-        <div class="val"><span id="gTarget">30.0</span><small>RPM</small></div>
+      <div class="gauge target" id="g1">
+        <div class="lbl" id="g1Lbl">Velocidad objetivo</div>
+        <div class="val"><span id="gTarget">30.0</span><small id="g1Unit">RPM</small></div>
       </div>
-      <div class="gauge real">
-        <div class="lbl">Velocidad real · encoder</div>
-        <div class="val"><span id="gReal">0.0</span><small>RPM</small></div>
+      <div class="gauge real" id="g2">
+        <div class="lbl" id="g2Lbl">Velocidad real · encoder</div>
+        <div class="val"><span id="gReal">0.0</span><small id="g2Unit">RPM</small></div>
       </div>
-      <div class="gauge linear">
-        <div class="lbl">Velocidad lineal · v = ω r</div>
-        <div class="val"><span id="gLin">0.00</span><small>m/s</small></div>
+      <div class="gauge linear" id="g3">
+        <div class="lbl" id="g3Lbl">Velocidad lineal · v = ω r</div>
+        <div class="val"><span id="gLin">0.00</span><small id="g3Unit">m/s</small></div>
       </div>
     </div>
 
@@ -674,6 +620,7 @@
         <div class="led" id="ledPower"></div> <span>Driver</span>
         <div class="led warn" id="ledEnc"></div> <span>Encoder</span>
         <div class="led" id="ledMotor"></div> <span>Motor</span>
+        <div class="led warn" id="ledPid"></div> <span id="ledModeTag">LIBRE</span>
         <span style="margin-left:auto;color:var(--ink-soft)">Ang: <b id="gAng" style="color:var(--ink)">0.0°</b></span>
       </div>
       <button class="bigbtn" id="startBtn">
@@ -690,8 +637,8 @@
     <div class="log" id="log"></div>
 
     <div class="pillrow">
-      <button class="pill" data-cmd="+">+ RPM</button>
-      <button class="pill" data-cmd="-">− RPM</button>
+      <button id="pill-plus"  class="pill" data-cmd="+">+ RPM</button>
+      <button id="pill-minus" class="pill" data-cmd="-">− RPM</button>
       <button class="pill" data-cmd="s">S · Toggle</button>
       <button class="pill" data-cmd="clr">CLR log</button>
     </div>
@@ -710,7 +657,7 @@
 
   <div class="footstrip">
     <div class="left"><span>FastAPI · ws://motor/control</span></div>
-    <div>v3.1 · build · 2026-05</div>
+    <div>v5.0 · PI-IMC · 2026-05</div>
   </div>
 </main>
 
@@ -718,19 +665,24 @@
 <script>
 /* ===== State ===== */
 const state = {
-  targetRPM: 30,
-  realRPM:   0,
-  dir:       1,
-  running:   false,
-  radiusCm:  12,
-  stepsRev:  200,
-  microsteps: 8,
-  encPpr:    600,
-  debounce:  50,
-  angleDeg:  0,
-  totalSteps: 0,
-  startedAt: null,
+  targetRPM:   30,
+  realRPM:     0,
+  dir:         1,
+  running:     false,
+  radiusCm:    12,
+  stepsRev:    200,
+  microsteps:  8,
+  encPpr:      600,
+  debounce:    50,
+  angleDeg:    0,
+  totalSteps:  0,
+  startedAt:   null,
   wsConnected: false,
+  // PI controller
+  usePid:     false,
+  measuredRpm: 0,
+  piError:     0,
+  controlRpm:  0,
 };
 
 /* ===== Log ===== */
@@ -755,21 +707,19 @@ function logRaw(html, cls='') {
 function escapeHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
-function fmt(n, d=1) { return n.toFixed(d); }
+function fmt(n, d=1) { return (+n).toFixed(d); }
 
-/* ===== WebSocket connection ===== */
+/* ===== WebSocket ===== */
 const WS_URL = `ws://${window.location.host}/ws`;
 let ws = null;
 
 function wsConnect() {
   ws = new WebSocket(WS_URL);
-
   ws.onopen = () => {
     state.wsConnected = true;
     document.getElementById('liveDot').textContent = 'CONECTADO';
     logRaw('<span class="ok">WS</span> Backend conectado');
   };
-
   ws.onclose = () => {
     state.wsConnected = false;
     ledPower.classList.remove('on');
@@ -780,31 +730,41 @@ function wsConnect() {
     logRaw('<span class="err">WS</span> Backend desconectado — reintentando en 3 s...', 'err');
     setTimeout(wsConnect, 3000);
   };
-
   ws.onerror = () => {
     logRaw('<span class="err">WS</span> Error de conexión', 'err');
   };
-
   ws.onmessage = (e) => {
     let m;
     try { m = JSON.parse(e.data); } catch { return; }
-
     switch (m.type) {
       case 'status': {
         const d = m.data;
+        const prevPid = state.usePid;
+        state.usePid = !!d.use_pid;
+
         state.targetRPM = d.target_rpm;
-        state.realRPM   = d.real_rpm;
-        state.angleDeg  = d.angle_deg;
-        const newDir    = d.dir === 'FWD' ? 1 : -1;
+        if (state.usePid) {
+          if (d.measured_rpm != null) state.measuredRpm = d.measured_rpm;
+          if (d.pi_error     != null) state.piError     = d.pi_error;
+          if (d.control_rpm  != null) state.controlRpm  = d.control_rpm;
+        }
+        state.realRPM  = d.real_rpm;
+        state.angleDeg = d.angle_deg;
+
+        const newDir = d.dir === 'FWD' ? 1 : -1;
         if (newDir !== state.dir) {
           state.dir = newDir;
           document.querySelectorAll('#dirSeg button').forEach(x => x.classList.remove('on'));
-          document.querySelector(`#dirSeg button[data-v="${d.dir === 'FWD' ? 'fwd' : 'rev'}"]`).classList.add('on');
+          const sel = document.querySelector(`#dirSeg button[data-v="${d.dir === 'FWD' ? 'fwd' : 'rev'}"]`);
+          if (sel) sel.classList.add('on');
         }
         state.running = d.running;
-        ledEnc.classList.add('on');   // encoder data is flowing
+        ledEnc.classList.add('on');
         applyRunningState(d.running);
-        syncSliderDisplay();
+
+        if (prevPid !== state.usePid) applyPidMode(state.usePid);
+
+        if (!state.usePid) syncSliderDisplay();
         updateGauges();
         break;
       }
@@ -815,17 +775,17 @@ function wsConnect() {
       }
       case 'params': {
         const p = m.data;
-        state.radiusCm  = p.radius_cm;
-        state.stepsRev  = p.steps_per_rev;
+        state.radiusCm   = p.radius_cm;
+        state.stepsRev   = p.steps_per_rev;
         state.microsteps = p.microsteps;
-        state.encPpr    = p.enc_ppr;
-        state.debounce  = p.debounce_us;
+        state.encPpr     = p.enc_ppr;
+        state.debounce   = p.debounce_us;
         syncParamInputs();
         updateTelemetry();
         break;
       }
       case 'ready':
-        ledPower.classList.add('on');   // serial/driver conectado
+        ledPower.classList.add('on');
         logRaw(`<span class="ok">FW</span> ${escapeHtml(m.firmware)}`, 'ok');
         break;
       case 'error':
@@ -838,12 +798,55 @@ function wsConnect() {
 }
 
 function wsSend(payload) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(payload));
-  }
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
 }
 
-/* ===== Sync param inputs after receiving params from backend ===== */
+/* ===== PID mode switch ===== */
+function applyPidMode(pid) {
+  // Seg buttons
+  document.querySelectorAll('#modeSeg button').forEach(x => x.classList.remove('on'));
+  const btn = document.querySelector(`#modeSeg button[data-v="${pid ? 'pid' : 'libre'}"]`);
+  if (btn) btn.classList.add('on');
+
+  // Show/hide control sections (slider visible in both modes; PI card only in PI mode)
+  document.getElementById('libreControls').style.display = '';
+  document.getElementById('pidControls').style.display   = pid ? '' : 'none';
+
+  // LED badge
+  const ledPidEl = document.getElementById('ledPid');
+  const modeTag  = document.getElementById('ledModeTag');
+  if (pid) {
+    ledPidEl.className = 'led pid';
+    modeTag.textContent = 'PID';
+    modeTag.style.color = 'var(--pid)';
+    modeTag.style.fontWeight = '700';
+  } else {
+    ledPidEl.className = 'led warn';
+    modeTag.textContent = 'LIBRE';
+    modeTag.style.color = '';
+    modeTag.style.fontWeight = '';
+  }
+
+  // Stage title
+  const stageTitle = document.getElementById('stageTitle');
+  stageTitle.innerHTML = pid
+    ? 'El <em class="pid-em">PI</em> controla la velocidad'
+    : 'El <em>hámster</em> corre en su rueda';
+
+  // Gauge styles
+  document.getElementById('g1').classList.toggle('pid-mode', pid);
+  document.getElementById('g3').classList.toggle('pid-mode', pid);
+
+  updatePillLabels();
+  updateGauges();
+}
+
+function updatePillLabels() {
+  document.getElementById('pill-plus').textContent  = '+ RPM';
+  document.getElementById('pill-minus').textContent = '− RPM';
+}
+
+/* ===== Param sync ===== */
 function syncParamInputs() {
   document.getElementById('radius').value     = state.radiusCm;
   document.getElementById('stepsRev').value   = state.stepsRev;
@@ -864,11 +867,11 @@ function sendParams() {
   wsSend({
     type: 'set_params',
     data: {
-      radius_cm:    state.radiusCm,
+      radius_cm:     state.radiusCm,
       steps_per_rev: state.stepsRev,
-      microsteps:   state.microsteps,
-      enc_ppr:      state.encPpr,
-      debounce_us:  state.debounce,
+      microsteps:    state.microsteps,
+      enc_ppr:       state.encPpr,
+      debounce_us:   state.debounce,
       rpm_min: 5, rpm_max: 120, rpm_step: 5,
     }
   });
@@ -884,8 +887,17 @@ rpm.addEventListener('input', () => {
   wsSend({ type: 'set_target', rpm: state.targetRPM });
   logRaw(`<span class="v">CMD</span> Target → <b>${state.targetRPM} RPM</b>`);
 });
-// Inicializa solo el display, sin enviar al WS
 syncSliderDisplay();
+
+/* Mode toggle */
+document.getElementById('modeSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const wantPid = b.dataset.v === 'pid';
+  if (wantPid !== state.usePid) {
+    wsSend({ type: 'cmd', cmd: 'toggle_pid' });
+    logRaw(`<span class="pid">MODE</span> ${wantPid ? 'Activando PI (lazo cerrado)…' : 'Desactivando PI (lazo abierto)…'}`);
+  }
+});
 
 document.getElementById('dirSeg').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
@@ -900,56 +912,60 @@ document.getElementById('dirSeg').addEventListener('click', e => {
 });
 
 document.getElementById('radius').addEventListener('input', e => {
-  state.radiusCm = Math.max(0.1, +e.target.value || 0.1);
-  sendParams();
-  updateGauges();
+  state.radiusCm = Math.max(0.1, +e.target.value || 0.1); sendParams(); updateGauges();
 });
 document.getElementById('stepsRev').addEventListener('input', e => {
-  state.stepsRev = Math.max(1, +e.target.value || 200);
-  sendParams();
-  updateTelemetry();
+  state.stepsRev = Math.max(1, +e.target.value || 200); sendParams(); updateTelemetry();
 });
 document.getElementById('microsteps').addEventListener('change', e => {
-  state.microsteps = +e.target.value;
-  sendParams();
-  updateTelemetry();
+  state.microsteps = +e.target.value; sendParams(); updateTelemetry();
 });
 document.getElementById('encPpr').addEventListener('input', e => {
-  state.encPpr = Math.max(1, +e.target.value || 600);
-  sendParams();
-  updateTelemetry();
+  state.encPpr = Math.max(1, +e.target.value || 600); sendParams(); updateTelemetry();
 });
 document.getElementById('debounce').addEventListener('input', e => {
-  state.debounce = Math.max(0, +e.target.value || 0);
-  sendParams();
+  state.debounce = Math.max(0, +e.target.value || 0); sendParams();
 });
 
 /* command pills */
 document.body.addEventListener('click', e => {
   const b = e.target.closest('[data-cmd]'); if (!b) return;
   const cmd = b.dataset.cmd;
-  if (cmd === '+') { rpm.value = Math.min(120, +rpm.value + 5); rpm.dispatchEvent(new Event('input')); }
-  else if (cmd === '-') { rpm.value = Math.max(5, +rpm.value - 5); rpm.dispatchEvent(new Event('input')); }
-  else if (cmd === 'r') { wsSend({ type: 'cmd', cmd: 'reverse' }); }
-  else if (cmd === 's') { wsSend({ type: 'cmd', cmd: state.running ? 'stop' : 'start' }); }
-  else if (cmd === 'z') { wsSend({ type: 'cmd', cmd: 'zero_encoder' }); logRaw('<span class="ok">ENC</span> Encoder → 0'); }
-  else if (cmd === 'estop') { wsSend({ type: 'cmd', cmd: 'e_stop' }); logRaw('<span class="err">⚠ E-STOP</span> motor detenido','err'); }
-  else if (cmd === 'clr') { logEl.innerHTML = ''; }
+  if (cmd === '+') {
+    rpm.value = Math.min(120, +rpm.value + 5);
+    rpm.dispatchEvent(new Event('input'));
+  } else if (cmd === '-') {
+    rpm.value = Math.max(5, +rpm.value - 5);
+    rpm.dispatchEvent(new Event('input'));
+  } else if (cmd === 'r') {
+    wsSend({ type: 'cmd', cmd: 'reverse' });
+    logRaw(`<span class="v">DIR</span> Invertir dirección`);
+  } else if (cmd === 's') {
+    wsSend({ type: 'cmd', cmd: state.running ? 'stop' : 'start' });
+  } else if (cmd === 'z') {
+    wsSend({ type: 'cmd', cmd: 'zero_encoder' });
+    logRaw('<span class="ok">ENC</span> Encoder → 0');
+  } else if (cmd === 'estop') {
+    wsSend({ type: 'cmd', cmd: 'e_stop' });
+    logRaw('<span class="err">⚠ E-STOP</span> motor detenido', 'err');
+  } else if (cmd === 'clr') {
+    logEl.innerHTML = '';
+  }
 });
 
 /* big button */
-const startBtn = document.getElementById('startBtn');
+const startBtn  = document.getElementById('startBtn');
 const stageHead = document.getElementById('stageHead');
-const liveDot = document.getElementById('liveDot');
-const ledMotor = document.getElementById('ledMotor');
-const ledPower = document.getElementById('ledPower');
-const ledEnc = document.getElementById('ledEnc');
+const liveDot   = document.getElementById('liveDot');
+const ledMotor  = document.getElementById('ledMotor');
+const ledPower  = document.getElementById('ledPower');
+const ledEnc    = document.getElementById('ledEnc');
 
 function applyRunningState(running) {
   if (running) {
     if (!state.startedAt) state.startedAt = performance.now();
     startBtn.classList.add('running');
-    startBtn.querySelector('.lbl').textContent = '■ DETENER';
+    startBtn.querySelector('.lbl').textContent    = '■ DETENER';
     startBtn.querySelector('.action').textContent = 'PARAR';
     stageHead.classList.add('live');
     liveDot.textContent = 'CORRIENDO';
@@ -957,7 +973,7 @@ function applyRunningState(running) {
   } else {
     state.startedAt = null;
     startBtn.classList.remove('running');
-    startBtn.querySelector('.lbl').textContent = '▶ INICIAR';
+    startBtn.querySelector('.lbl').textContent    = '▶ INICIAR';
     startBtn.querySelector('.action').textContent = 'CORRER';
     stageHead.classList.remove('live');
     liveDot.textContent = state.wsConnected ? 'CONECTADO' : 'EN ESPERA';
@@ -969,46 +985,73 @@ startBtn.addEventListener('click', () => {
   wsSend({ type: 'cmd', cmd: state.running ? 'stop' : 'start' });
 });
 
-/* ===== Wheel rungs (one-time draw) ===== */
+/* ===== Wheel rungs ===== */
 (function makeRungs(){
   const rungs = document.getElementById('rungs');
   const N = 28, R = 133;
   for (let i=0;i<N;i++){
-    const a = (i/N) * Math.PI * 2;
-    const x1 = Math.cos(a)*R, y1 = Math.sin(a)*R;
-    const x2 = Math.cos(a)*(R-12), y2 = Math.sin(a)*(R-12);
+    const a = (i/N)*Math.PI*2;
     const ln = document.createElementNS('http://www.w3.org/2000/svg','line');
-    ln.setAttribute('x1',x1.toFixed(2)); ln.setAttribute('y1',y1.toFixed(2));
-    ln.setAttribute('x2',x2.toFixed(2)); ln.setAttribute('y2',y2.toFixed(2));
+    ln.setAttribute('x1',(Math.cos(a)*R).toFixed(2));
+    ln.setAttribute('y1',(Math.sin(a)*R).toFixed(2));
+    ln.setAttribute('x2',(Math.cos(a)*(R-12)).toFixed(2));
+    ln.setAttribute('y2',(Math.sin(a)*(R-12)).toFixed(2));
     rungs.appendChild(ln);
   }
 })();
 
-/* ===== Compute helpers ===== */
+/* ===== Gauges & telemetry ===== */
 function updateTelemetry() {
-  const spr = state.stepsRev * state.microsteps;
-  const fStep = state.realRPM * spr / 60;
+  const spr   = state.stepsRev * state.microsteps;
+  const fStep = Math.abs(state.realRPM) * spr / 60;
   const tHalf = fStep > 0.01 ? 0.5e6/fStep : 0;
   const perim = 2 * Math.PI * state.radiusCm;
   document.getElementById('tStepF').textContent = fStep.toFixed(0);
-  document.getElementById('tHalf').textContent = tHalf.toFixed(0);
-  document.getElementById('tCpr').textContent = state.encPpr * 4;
+  document.getElementById('tHalf').textContent  = tHalf.toFixed(0);
+  document.getElementById('tCpr').textContent   = state.encPpr * 4;
   document.getElementById('tPerim').textContent = perim.toFixed(1);
   document.getElementById('tSteps').textContent = '—';
 }
+
 function updateGauges() {
-  document.getElementById('gTarget').textContent = fmt(state.targetRPM,1);
-  document.getElementById('gReal').textContent   = fmt(state.realRPM,1);
-  const omega = state.realRPM * 2 * Math.PI / 60;             // rad/s
-  const v = omega * (state.radiusCm/100);                     // m/s (radio en m)
-  document.getElementById('gLin').textContent = fmt(v,2);
-  document.getElementById('gAng').textContent = fmt(state.angleDeg,1)+'°';
+  if (state.usePid) {
+    document.getElementById('gTarget').textContent = fmt(state.targetRPM, 1);
+    document.getElementById('gReal').textContent   = fmt(state.measuredRpm, 1);
+    document.getElementById('gLin').textContent    = fmt(state.controlRpm, 1);
+
+    document.getElementById('g1Lbl').textContent  = 'Velocidad objetivo';
+    document.getElementById('g2Lbl').textContent  = 'Velocidad medida · ventana';
+    document.getElementById('g3Lbl').textContent  = 'Salida PI · control';
+    document.getElementById('g1Unit').textContent = 'RPM';
+    document.getElementById('g2Unit').textContent = 'RPM';
+    document.getElementById('g3Unit').textContent = 'RPM';
+
+    document.getElementById('piTgtRpm').textContent = fmt(state.targetRPM, 1);
+    document.getElementById('piMeas').textContent   = fmt(state.measuredRpm, 1);
+    document.getElementById('piErr').textContent    = fmt(state.piError, 2);
+    document.getElementById('piCtrl').textContent   = fmt(state.controlRpm, 1);
+  } else {
+    document.getElementById('gTarget').textContent = fmt(state.targetRPM, 1);
+    document.getElementById('gReal').textContent   = fmt(state.realRPM, 1);
+    const omega = state.realRPM * 2 * Math.PI / 60;
+    const v = omega * (state.radiusCm / 100);
+    document.getElementById('gLin').textContent = fmt(v, 2);
+
+    document.getElementById('g1Lbl').textContent  = 'Velocidad objetivo';
+    document.getElementById('g2Lbl').textContent  = 'Velocidad real · encoder';
+    document.getElementById('g3Lbl').textContent  = 'Velocidad lineal · v = ω r';
+    document.getElementById('g1Unit').textContent = 'RPM';
+    document.getElementById('g2Unit').textContent = 'RPM';
+    document.getElementById('g3Unit').textContent = 'm/s';
+  }
+  document.getElementById('gAng').textContent = fmt(state.angleDeg, 1) + '°';
   updateTelemetry();
 }
+
 /* ===== Animation loop ===== */
-const wheelEl = document.getElementById('wheel');
-const tailEl  = document.getElementById('mouseTail');
-const headEl  = document.getElementById('mouseHead');
+const wheelEl   = document.getElementById('wheel');
+const tailEl    = document.getElementById('mouseTail');
+const headEl    = document.getElementById('mouseHead');
 const legBL = document.getElementById('legBackL');
 const legBR = document.getElementById('legBackR');
 const legFL = document.getElementById('legFrontL');
@@ -1017,46 +1060,40 @@ const speedLines = document.getElementById('speedLines');
 
 let wheelAngle = 0;
 let lastT = performance.now();
+
 function tick(now) {
   const dt = Math.min(0.1, (now - lastT)/1000); lastT = now;
 
-  // Wheel rotation visual (usa realRPM del backend, no simulación)
-  const degPerSec = state.realRPM * 6 * state.dir;
+  const degPerSec = state.realRPM * 6;  // signo embebido en realRPM (+ FWD, − REV)
   wheelAngle = (wheelAngle + degPerSec * dt) % 360;
   wheelEl.setAttribute('transform', `translate(260 180) rotate(${wheelAngle})`);
 
-  // Mouse animation — leg cycle frequency scales with RPM
-  const cyc = (now/1000) * Math.max(2, state.realRPM/8) * Math.abs(state.dir);
-  const sw = Math.sin(cyc*Math.PI*2);
+  const cyc = (now/1000) * Math.max(2, Math.abs(state.realRPM)/8);
+  const sw  = Math.sin(cyc*Math.PI*2);
   const sw2 = Math.sin(cyc*Math.PI*2 + Math.PI);
-  legBL.setAttribute('transform', `translate(0 ${(sw>0?sw*4:0)}) rotate(${sw*18} -12 5)`);
-  legBR.setAttribute('transform', `translate(0 ${(sw2>0?sw2*4:0)}) rotate(${sw2*18} 8 5)`);
-  legFL.setAttribute('transform', `translate(0 ${(sw2>0?sw2*3:0)}) rotate(${sw2*22} 18 5)`);
-  legFR.setAttribute('transform', `translate(0 ${(sw>0?sw*3:0)}) rotate(${sw*22} 26 5)`);
+  legBL.setAttribute('transform', `translate(0 ${sw>0?sw*4:0}) rotate(${sw*18} -12 5)`);
+  legBR.setAttribute('transform', `translate(0 ${sw2>0?sw2*4:0}) rotate(${sw2*18} 8 5)`);
+  legFL.setAttribute('transform', `translate(0 ${sw2>0?sw2*3:0}) rotate(${sw2*22} 18 5)`);
+  legFR.setAttribute('transform', `translate(0 ${sw>0?sw*3:0}) rotate(${sw*22} 26 5)`);
 
-  // body bob
-  const bob = Math.sin(cyc*Math.PI*4) * Math.min(2, state.realRPM/40);
-  document.getElementById('mouse').setAttribute('transform', `translate(260 ${295 + bob})`);
+  const bob = Math.sin(cyc*Math.PI*4) * Math.min(2, Math.abs(state.realRPM)/40);
+  document.getElementById('mouse').setAttribute('transform', `translate(260 ${295+bob})`);
 
-  // Tail wag
-  const wag = Math.sin(now/180) * Math.min(20, state.realRPM/3);
-  tailEl.setAttribute('d', `M -34 4 q -22 ${-8 - wag*0.3} -38 ${6 + wag}`);
-  // Head bob
-  headEl.setAttribute('transform', `translate(28 ${-6 + bob*0.4}) rotate(${Math.sin(cyc*Math.PI*2)*4})`);
+  const wag = Math.sin(now/180) * Math.min(20, Math.abs(state.realRPM)/3);
+  tailEl.setAttribute('d', `M -34 4 q -22 ${-8-wag*0.3} -38 ${6+wag}`);
+  headEl.setAttribute('transform', `translate(28 ${-6+bob*0.4}) rotate(${Math.sin(cyc*Math.PI*2)*4})`);
 
-  // Speed lines
   const speedAlpha = Math.min(1, Math.max(0, (Math.abs(state.realRPM)-25)/95));
   speedLines.setAttribute('opacity', speedAlpha.toFixed(2));
   if (speedAlpha > 0.05 && Math.random() < 0.35) {
     while (speedLines.children.length > 14) speedLines.removeChild(speedLines.firstChild);
-    const y = 250 + Math.random()*70;
-    const xs = state.dir>0 ? 90 + Math.random()*120 : 320 + Math.random()*120;
-    const xe = xs + (state.dir>0 ? -30 - Math.random()*40 : 30 + Math.random()*40);
+    const y  = 250 + Math.random()*70;
+    const fwd = state.realRPM >= 0;   // signo embebido en realRPM
+    const xs = fwd ? 90+Math.random()*120 : 320+Math.random()*120;
+    const xe = xs + (fwd ? -30-Math.random()*40 : 30+Math.random()*40);
     const ln = document.createElementNS('http://www.w3.org/2000/svg','line');
-    ln.setAttribute('x1', xs.toFixed(1));
-    ln.setAttribute('y1', y.toFixed(1));
-    ln.setAttribute('x2', xe.toFixed(1));
-    ln.setAttribute('y2', y.toFixed(1));
+    ln.setAttribute('x1', xs.toFixed(1)); ln.setAttribute('y1', y.toFixed(1));
+    ln.setAttribute('x2', xe.toFixed(1)); ln.setAttribute('y2', y.toFixed(1));
     ln.setAttribute('opacity', (0.5+Math.random()*0.4).toFixed(2));
     speedLines.appendChild(ln);
     setTimeout(() => ln.remove(), 350);
@@ -1064,9 +1101,8 @@ function tick(now) {
 
   updateGauges();
 
-  // elapsed
   if (state.running && state.startedAt) {
-    const s = Math.floor((now - state.startedAt)/1000);
+    const s  = Math.floor((now - state.startedAt)/1000);
     const mm = String(Math.floor(s/60)).padStart(2,'0');
     const ss = String(s%60).padStart(2,'0');
     document.getElementById('tElapsed').textContent = `${mm}:${ss}`;
@@ -1076,10 +1112,10 @@ function tick(now) {
 }
 requestAnimationFrame(tick);
 
-/* boot greeting + connect */
-logRaw('===  NEMA17 + TMC2208 + ENCODER  ===','ok');
+/* boot */
+logRaw('===  NEMA17 + TMC2208 + ENCODER + PI  ===','ok');
 logRaw(`Conectando a <span class="v">${WS_URL}</span>…`);
-logRaw('Comandos: + subir / − bajar / R girar / S parar / Z zero');
+logRaw('Modos: <span class="v">LIBRE</span> (velocidad) · <span class="pid">PI</span> (velocidad lazo cerrado)');
 wsConnect();
 </script>
 </body>

@@ -10,7 +10,9 @@ from ..state import motor_state
 
 router = APIRouter(prefix="/api")
 
-VALID_CMDS = frozenset({"start", "stop", "reverse", "zero_encoder", "e_stop"})
+VALID_CMDS = frozenset({
+    "start", "stop", "reverse", "zero_encoder", "e_stop", "toggle_pid",
+})
 
 
 @router.get("/ports")
@@ -65,6 +67,8 @@ async def post_cmd(cmd: str) -> dict:
             await serial_link.cmd_zero_encoder()
         case "e_stop":
             await serial_link.cmd_e_stop()
+        case "toggle_pid":
+            await serial_link.cmd_toggle_pid()
     return {"ok": True, "cmd": cmd}
 
 

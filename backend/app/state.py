@@ -13,6 +13,7 @@ class MotorState:
     def __init__(self) -> None:
         self.last_status: Optional[StatusFrame] = None
         self.params: Params = Params()
+        self.use_pid: bool = False
         self._clients: set[asyncio.Queue] = set()
         self._log_buffer: deque[dict] = deque(maxlen=200)
         self._lock = asyncio.Lock()
