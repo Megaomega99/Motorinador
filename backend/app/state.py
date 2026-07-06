@@ -4,9 +4,12 @@ import asyncio
 import json
 import time
 from collections import deque
-from typing import Optional
+from typing import Literal, Optional
 
+from .config import settings
 from .models import Params, StatusFrame, WsLog, WsMessage
+
+LogLevel = Literal["info", "warn", "error"]
 
 
 class MotorState:
@@ -15,7 +18,7 @@ class MotorState:
         self.params: Params = Params()
         self.use_pid: bool = False
         self._clients: set[asyncio.Queue] = set()
-        self._log_buffer: deque[dict] = deque(maxlen=200)
+        self._log_buffer: deque[dict] = deque(maxlen=settings.log_buffer_size)
         self._lock = asyncio.Lock()
 
     # ── client registry ────────────────────────────────────────
@@ -47,19 +50,9 @@ class MotorState:
         if isinstance(msg, WsLog):
             self._log_buffer.append(json.loads(raw))
 
-    async def broadcast_raw(self, raw: str) -> None:
-        dead: list[asyncio.Queue] = []
-        for q in list(self._clients):
-            try:
-                q.put_nowait(raw)
-            except asyncio.QueueFull:
-                dead.append(q)
-        for q in dead:
-            self._clients.discard(q)
-
     # ── convenience log helpers ────────────────────────────────
 
-    async def log(self, msg: str, level: str = "info") -> None:
+    async def log(self, msg: str, level: LogLevel = "info") -> None:
         await self.broadcast(WsLog(msg=msg, level=level, ts=time.time()))
 
     async def log_info(self, msg: str) -> None:

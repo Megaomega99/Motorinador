@@ -36,7 +36,11 @@ _STATUS_LIBRE_RE = re.compile(
     r"(CORRIENDO|PARADO)"
 )
 
-VALID_CMDS = frozenset({"+", "-", "r", "s", "z", "c"})
+# Comandos de un carácter aceptados por el firmware (idempotentes salvo +/-).
+# '+'/'-' no los emite ningún flujo del backend hoy (la UI usa objetivos
+# absolutos vía 'v'), pero se permiten por ser parte del protocolo.
+# Los toggles legados 's'/'r'/'c' existen en firmware pero el backend no los usa.
+VALID_CMDS = frozenset({"+", "-", "z", "0", "1", "e", "f", "b", "p", "l"})
 
 
 def _parse_line(line: str) -> Optional[StatusFrame]:
@@ -82,7 +86,6 @@ class SerialLink:
         self._writer: Optional[asyncio.StreamWriter] = None
         self._connected = False
         self._cmd_lock = asyncio.Lock()
-        self._last_target: float = 30.0
         self._pending_target: Optional[float] = None
         self._debounce_task: Optional[asyncio.Task] = None
 
@@ -147,7 +150,6 @@ class SerialLink:
             frame = _enrich(frame, motor_state.params)
             motor_state.last_status = frame
             motor_state.use_pid = frame.use_pid
-            self._last_target = frame.target_rpm
             await motor_state.broadcast(WsStatus(data=frame))
         else:
             level = "warn" if "error" in line.lower() else "info"
@@ -165,17 +167,14 @@ class SerialLink:
             await self._writer.drain()
 
     async def set_target_rpm(self, target: float) -> None:
+        """Envía el objetivo absoluto al firmware con el comando 'v<rpm>\\n'."""
         params = motor_state.params
-        step = params.rpm_step if params.rpm_step > 0 else 5.0
-        target = max(params.rpm_min, min(params.rpm_max, target))
-        steps = round((target - self._last_target) / step)
-        if steps == 0:
-            return
-        cmd = "+" if steps > 0 else "-"
-        for _ in range(abs(steps)):
-            await self.send(cmd)
-            await asyncio.sleep(0.02)
-        self._last_target = self._last_target + steps * step
+        clamped = max(params.rpm_min, min(params.rpm_max, target))
+        if self._writer is None:
+            raise RuntimeError("Serial port not connected")
+        async with self._cmd_lock:
+            self._writer.write(f"v{clamped:.1f}\n".encode("ascii"))
+            await self._writer.drain()
 
     def schedule_set_target(self, target: float) -> None:
         self._pending_target = target
@@ -194,33 +193,26 @@ class SerialLink:
                 self._pending_target = None
 
     # ── high-level commands ────────────────────────────────────
-
-    async def cmd_toggle(self) -> None:
-        await self.send("s")
+    # Todos son absolutos e idempotentes en firmware: no hace falta
+    # (ni conviene) consultar el último estado, que llega a 1 Hz.
 
     async def cmd_start(self) -> None:
-        status = motor_state.last_status
-        if status is None or not status.running:
-            await self.send("s")
+        await self.send("1")
 
     async def cmd_stop(self) -> None:
-        status = motor_state.last_status
-        if status is None or status.running:
-            await self.send("s")
+        await self.send("0")
 
     async def cmd_e_stop(self) -> None:
-        status = motor_state.last_status
-        if status is None or status.running:
-            await self.send("s")
+        await self.send("e")
 
-    async def cmd_reverse(self) -> None:
-        await self.send("r")
+    async def cmd_set_direction(self, forward: bool) -> None:
+        await self.send("f" if forward else "b")
+
+    async def cmd_set_mode(self, pid: bool) -> None:
+        await self.send("p" if pid else "l")
 
     async def cmd_zero_encoder(self) -> None:
         await self.send("z")
-
-    async def cmd_toggle_pid(self) -> None:
-        await self.send("c")
 
 
 

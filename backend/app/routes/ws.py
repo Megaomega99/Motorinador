@@ -5,9 +5,11 @@ import json
 import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from pydantic import ValidationError
 
 from ..models import (
+    RPM_MAX,
+    RPM_MIN,
+    RPM_STEP,
     CmdMessage,
     SetParamsMessage,
     SetTargetMessage,
@@ -29,6 +31,14 @@ async def _drain(ws: WebSocket, q: asyncio.Queue) -> None:
         await ws.send_text(msg)
 
 
+def _log_drain_failure(task: asyncio.Task) -> None:
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.warning("WS drain task terminó con error: %s", exc)
+
+
 @router.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket) -> None:
     await ws.accept()
@@ -48,6 +58,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
         await ws.send_text(WsError(msg="Puerto serial no conectado — esperando Arduino...").model_dump_json())
 
     drain_task = asyncio.create_task(_drain(ws, q))
+    drain_task.add_done_callback(_log_drain_failure)
 
     try:
         while True:
@@ -77,34 +88,43 @@ async def _handle_client_message(raw: str) -> None:
         return
 
     if msg_type == "cmd":
-        msg = CmdMessage.model_validate(data)
+        cmd_msg = CmdMessage.model_validate(data)
         if not serial_link.connected:
             raise RuntimeError("Puerto serial no conectado")
-        match msg.cmd:
+        match cmd_msg.cmd:
             case "start":
                 await serial_link.cmd_start()
             case "stop":
                 await serial_link.cmd_stop()
-            case "reverse":
-                await serial_link.cmd_reverse()
-            case "zero_encoder":
-                await serial_link.cmd_zero_encoder()
             case "e_stop":
                 await serial_link.cmd_e_stop()
-            case "toggle_pid":
-                await serial_link.cmd_toggle_pid()
+            case "zero_encoder":
+                await serial_link.cmd_zero_encoder()
+            case "dir_fwd":
+                await serial_link.cmd_set_direction(forward=True)
+            case "dir_rev":
+                await serial_link.cmd_set_direction(forward=False)
+            case "mode_pi":
+                await serial_link.cmd_set_mode(pid=True)
+            case "mode_libre":
+                await serial_link.cmd_set_mode(pid=False)
 
     elif msg_type == "set_target":
-        msg = SetTargetMessage.model_validate(data)
+        target_msg = SetTargetMessage.model_validate(data)
         if not serial_link.connected:
             raise RuntimeError("Puerto serial no conectado")
-        serial_link.schedule_set_target(msg.rpm)
+        serial_link.schedule_set_target(target_msg.rpm)
 
     elif msg_type == "set_params":
-        msg = SetParamsMessage.model_validate(data)
-        if msg.data.radius_cm <= 0:
+        params_msg = SetParamsMessage.model_validate(data)
+        if params_msg.data.radius_cm <= 0:
             raise ValueError("radius_cm debe ser > 0")
-        if msg.data.rpm_step <= 0:
-            raise ValueError("rpm_step debe ser > 0")
-        motor_state.params = msg.data
+        # Los límites de RPM son propiedad del servidor (espejo del firmware):
+        # se ignora cualquier valor enviado por el cliente.
+        motor_state.params = params_msg.data.model_copy(
+            update={"rpm_min": RPM_MIN, "rpm_max": RPM_MAX, "rpm_step": RPM_STEP}
+        )
         await motor_state.broadcast(WsParams(data=motor_state.params))
+
+    else:
+        raise ValueError(f"Tipo de mensaje desconocido: {msg_type!r}")

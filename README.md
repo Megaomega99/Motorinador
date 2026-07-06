@@ -172,7 +172,7 @@ http://localhost:8000
 
 | Control | Para qué sirve |
 |---|---|
-| **Target RPM** | Arrastra el deslizador para elegir la velocidad deseada (5 a 120 RPM) |
+| **Target RPM** | Arrastra el deslizador o escribe el valor exacto (1 a 120 RPM, en pasos de 1 RPM) |
 | **Sentido de giro** | Elige si el motor gira hacia adelante o hacia atrás |
 | **Radio de la rueda** | Ingresa el radio en centímetros para calcular la velocidad lineal |
 | **Pasos/rev, Microsteps, PPR, Debounce** | Parámetros avanzados del hardware — déjalos en sus valores por defecto a menos que cambies los componentes |
@@ -186,7 +186,7 @@ Muestra una animación en tiempo real de la rueda girando. La velocidad de la an
 | Indicador | Significado |
 |---|---|
 | 🟢 **POWER** | Verde = Arduino conectado y comunicándose |
-| 🟢 **ENCODER** | Verde = el encoder está enviando datos de velocidad real |
+| 🟢 **ENCODER** | Verde = llegan datos frescos del encoder (se apaga si pasan >2.5 s sin datos). La velocidad medida sigue viva incluso con el motor en pausa |
 | **Target RPM** | La velocidad que le pediste al motor |
 | **Real RPM** | La velocidad que el encoder está midiendo realmente |
 | **Ángulo** | La posición angular acumulada del eje |
@@ -197,9 +197,31 @@ Muestra una animación en tiempo real de la rueda girando. La velocidad de la an
 | Botón | Acción |
 |---|---|
 | **START** | Arranca el motor a la velocidad configurada |
-| **STOP** | Detiene el motor suavemente |
-| **E-STOP** | Parada de emergencia inmediata |
+| **STOP** | Detiene el motor y desenergiza el driver (el eje queda libre) |
+| **E-STOP** | Parada de emergencia real: comando dedicado `e` que detiene y desenergiza el driver incondicionalmente |
 | **Zero encoder** | Pone el conteo de ángulo a cero |
+
+### Protocolo serial (firmware ↔ backend, 115200 baud)
+
+| Comando | Formato | Acción |
+|---|---|---|
+| `v` | `v<rpm>\n` (ej. `v37.5`) | Fijar RPM objetivo absoluto, recorte a [1, 120] |
+| `+` / `-` | un carácter | Ajuste relativo ±1 RPM |
+| `1` / `0` | un carácter | Marcha / paro (idempotentes; `0` desenergiza el driver) |
+| `e` | un carácter | E-STOP incondicional (desenergiza e imprime `E-STOP`) |
+| `f` / `b` | un carácter | Dirección adelante / reversa (absoluta) |
+| `p` / `l` | un carácter | Modo PI / LIBRE (absoluto) |
+| `z` | un carácter | Encoder a cero |
+| `s` / `r` / `c` | un carácter | Toggles legados (solo uso manual por terminal) |
+
+> Los límites de velocidad (`rpm_min`, `rpm_max`, `rpm_step`) los fija el servidor
+> como espejo de las constantes del firmware; los valores enviados por los clientes
+> en `set_params` / `PUT /api/params` se ignoran.
+
+> ⚠️ **Seguridad:** el servidor no tiene autenticación y acepta peticiones de
+> cualquier origen (CORS abierto). Está pensado para uso local (`localhost`) o en
+> una red de laboratorio de confianza — no lo expongas a redes compartidas o a
+> internet sin añadir autenticación.
 
 ### Consola de log
 

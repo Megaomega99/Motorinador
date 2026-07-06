@@ -5,6 +5,12 @@ from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
+# Límites de velocidad — espejo de RPM_MIN/RPM_MAX/RPM_STEP en src/main.cpp.
+# Única fuente de verdad del backend: los clientes no pueden modificarlos.
+RPM_MIN = 1.0
+RPM_MAX = 120.0
+RPM_STEP = 1.0
+
 
 class StatusFrame(BaseModel):
     target_rpm: float
@@ -28,9 +34,9 @@ class Params(BaseModel):
     microsteps: int = 8
     enc_ppr: int = 600
     debounce_us: int = 50
-    rpm_min: float = 5.0
-    rpm_max: float = 120.0
-    rpm_step: float = 5.0
+    rpm_min: float = RPM_MIN
+    rpm_max: float = RPM_MAX
+    rpm_step: float = RPM_STEP
 
 
 # WebSocket messages: backend → client
@@ -70,19 +76,16 @@ WsMessage = Union[WsStatus, WsLog, WsParams, WsReady, WsError]
 class CmdMessage(BaseModel):
     type: Literal["cmd"] = "cmd"
     cmd: Literal[
-        "start", "stop", "reverse", "zero_encoder", "e_stop",
-        "toggle_pid",
+        "start", "stop", "e_stop", "zero_encoder",
+        "dir_fwd", "dir_rev", "mode_pi", "mode_libre",
     ]
 
 
 class SetTargetMessage(BaseModel):
     type: Literal["set_target"] = "set_target"
-    rpm: float = Field(ge=5.0, le=120.0)
+    rpm: float = Field(ge=RPM_MIN, le=RPM_MAX)
 
 
 class SetParamsMessage(BaseModel):
     type: Literal["set_params"] = "set_params"
     data: Params
-
-
-ClientMessage = Union[CmdMessage, SetTargetMessage, SetParamsMessage]

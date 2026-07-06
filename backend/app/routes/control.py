@@ -1,18 +1,20 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from typing import get_args
 
-from ..models import Params, StatusFrame
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+
+from ..models import RPM_MAX, RPM_MIN, RPM_STEP, CmdMessage, Params, StatusFrame
 from ..port_detector import list_serial_ports
 from ..serial_link import serial_link
 from ..state import motor_state
 
 router = APIRouter(prefix="/api")
 
-VALID_CMDS = frozenset({
-    "start", "stop", "reverse", "zero_encoder", "e_stop", "toggle_pid",
-})
+# Derivado del Literal de CmdMessage: una sola fuente de verdad para
+# los nombres de comando de la API (REST y WebSocket).
+VALID_CMDS = frozenset(get_args(CmdMessage.model_fields["cmd"].annotation))
 
 
 @router.get("/ports")
@@ -46,8 +48,14 @@ async def get_params() -> Params:
 
 @router.put("/params", response_model=Params)
 async def update_params(params: Params) -> Params:
-    motor_state.params = params
-    return params
+    if params.radius_cm <= 0:
+        raise HTTPException(status_code=422, detail="radius_cm debe ser > 0")
+    # Los límites de RPM son propiedad del servidor (espejo del firmware):
+    # se ignora cualquier valor enviado por el cliente.
+    motor_state.params = params.model_copy(
+        update={"rpm_min": RPM_MIN, "rpm_max": RPM_MAX, "rpm_step": RPM_STEP}
+    )
+    return motor_state.params
 
 
 @router.post("/cmd/{cmd}")
@@ -61,19 +69,23 @@ async def post_cmd(cmd: str) -> dict:
             await serial_link.cmd_start()
         case "stop":
             await serial_link.cmd_stop()
-        case "reverse":
-            await serial_link.cmd_reverse()
-        case "zero_encoder":
-            await serial_link.cmd_zero_encoder()
         case "e_stop":
             await serial_link.cmd_e_stop()
-        case "toggle_pid":
-            await serial_link.cmd_toggle_pid()
+        case "zero_encoder":
+            await serial_link.cmd_zero_encoder()
+        case "dir_fwd":
+            await serial_link.cmd_set_direction(forward=True)
+        case "dir_rev":
+            await serial_link.cmd_set_direction(forward=False)
+        case "mode_pi":
+            await serial_link.cmd_set_mode(pid=True)
+        case "mode_libre":
+            await serial_link.cmd_set_mode(pid=False)
     return {"ok": True, "cmd": cmd}
 
 
 class TargetPayload(BaseModel):
-    rpm: float
+    rpm: float = Field(ge=RPM_MIN, le=RPM_MAX)
 
 
 @router.post("/target")
