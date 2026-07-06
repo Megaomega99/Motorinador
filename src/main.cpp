@@ -369,7 +369,7 @@ void pumpStatus() {
 }
 
 // =============================================================
-// Acciones de comando — funciones pequeñas e idempotentes
+// Acciones de comando — funciones pequeñas e idempotentes muajaja
 // =============================================================
 
 // Fija el RPM objetivo con recorte a [RPM_MIN, RPM_MAX].
