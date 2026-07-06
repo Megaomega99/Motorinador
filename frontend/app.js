@@ -7,7 +7,7 @@
 
 /* ===== State ===== */
 const state = {
-  targetRPM:   30,
+  targetRPM:   1,
   realRPM:     0,
   dir:         1,
   running:     false,

@@ -95,9 +95,9 @@ const float VEL_ALPHA = 0.3f;
 // ─────────────────────────────────────────────────────────────
 // Variables de estado del sistema
 // ─────────────────────────────────────────────────────────────
-float   targetRPM    = 30.0f;   // RPM objetivo (ambos modos)
-float   controlRPM   = 30.0f;   // RPM enviadas al driver (salida del PI o targetRPM)
-float   piIntegral   = 30.0f;   // acumulador integral
+float   targetRPM    = 1.0f;    // RPM objetivo (ambos modos)
+float   controlRPM   = 1.0f;    // RPM enviadas al driver (salida del PI o targetRPM)
+float   piIntegral   = 1.0f;    // acumulador integral
 float   measuredRPM  = 0.0f;    // velocidad medida (media móvil, actualizada cada 10 ms)
 bool    usePID       = false;   // false = lazo abierto, true = lazo cerrado
 bool    motorEnabled = true;
