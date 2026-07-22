@@ -4,16 +4,21 @@
 // Control de motor NEMA17 17HS4401 con driver TMC2208
 // y encoder incremental de cuadratura E38S6G5-600B-G24N
 //
-// Plataforma : Arduino Nano Every (ATmega4809)
+// Plataforma : Arduino Nano Every (ATmega4809, 5 V) │ Arduino Nano 33 BLE
+//              (nRF52840, ARM Cortex-M4, core mbed, 3.3 V). El mismo código
+//              compila para ambas (env nano_every / nano33ble en platformio.ini)
+//              y usa los mismos números de pin → NO cambian las conexiones.
 // Modo driver: standalone STEP/DIR  MS1=MS2=GND → 1/8 micropaso
 //
 // ── Conexiones driver ──────────────────────────────────────
 //   D4 → STEP    D5 → DIR    D6 → EN  (LOW = habilitado)
 //
 // ── Conexiones encoder (NPN open-collector) ────────────────
-//   Rojo  → 5 V        Negro → GND
-//   Blanco → D7 (A)    Verde → D8 (B)
-//   Pull-up interno activado por software (~40 kΩ)
+//   Rojo  → alim. externa   Negro → GND
+//   Blanco → D7 (A)         Verde → D8 (B)
+//   Pull-up interno activado por software (Nano Every ~40 kΩ a 5 V;
+//   Nano 33 BLE ~13 kΩ a 3.3 V). Al ser salida open-collector, el nivel
+//   alto lo fija el pull-up interno → en el 33 BLE nunca supera 3.3 V (seguro).
 //
 // ── Control por Monitor Serial  115200 baud ────────────────
 //   ABSOLUTOS (idempotentes, usados por el backend):
@@ -304,6 +309,18 @@ static uint8_t statusLen      = 0;
 static uint8_t statusPos      = 0;
 static bool    statusPending  = false;
 
+// fmtFloat — formatea un float con 1 decimal de forma portable.
+//   AVR (Nano Every) : snprintf NO soporta %f → se usa dtostrf.
+//   ARM/mbed (33 BLE): no existe dtostrf → snprintf SÍ soporta %f.
+static inline void fmtFloat(char* out, size_t n, float v) {
+#if defined(__AVR__)
+  (void)n;
+  dtostrf(v, 1, 1, out);
+#else
+  snprintf(out, n, "%.1f", (double)v);
+#endif
+}
+
 // Formatea la línea con el estado ACTUAL. Solo debe llamarse con el
 // buffer ya drenado (statusPos >= statusLen); si no, se rompería una
 // línea a medio enviar y el parser del backend leería basura.
@@ -318,16 +335,16 @@ static void formatStatusLine() {
   // recorta a ±999.9 para garantizar que dtostrf quepa en el buffer.
   const float measSafe = (measuredRPM > 999.9f) ? 999.9f : measuredRPM;
 
-  // dtostrf: snprintf de megaavr no soporta %f. Peor caso "-999.9" = 6+1 chars.
+  // Peor caso "-999.9" = 6+1 chars. Ver fmtFloat (portable AVR/ARM).
   char sTgt[10], sMeas[10], sErr[10], sCtrl[10], sAng[10];
-  dtostrf(targetRPM,       1, 1, sTgt);
-  dtostrf(sign * measSafe, 1, 1, sMeas);
-  dtostrf(angleDeg,        1, 1, sAng);
+  fmtFloat(sTgt,  sizeof(sTgt),  targetRPM);
+  fmtFloat(sMeas, sizeof(sMeas), sign * measSafe);
+  fmtFloat(sAng,  sizeof(sAng),  angleDeg);
 
   int len;
   if (usePID) {
-    dtostrf(targetRPM - measSafe, 1, 1, sErr);
-    dtostrf(sign * controlRPM,    1, 1, sCtrl);
+    fmtFloat(sErr,  sizeof(sErr),  targetRPM - measSafe);
+    fmtFloat(sCtrl, sizeof(sCtrl), sign * controlRPM);
     len = snprintf(statusBuf, sizeof(statusBuf),
                    "[PI]  Tgt:%sRPM  Meas:%sRPM  Err:%s  Ctrl:%sRPM  Ang:%sdeg  Dir:%s  %s\r\n",
                    sTgt, sMeas, sErr, sCtrl, sAng,
@@ -360,12 +377,24 @@ void pumpStatus() {
     statusPending = false;
     formatStatusLine();
   }
+#if defined(__AVR__)
+  // AVR (Nano Every): UART a 115200 con TX de 64 B. Se drena por trozos según
+  // el sitio libre para no bloquear ~3 ms la generación de pasos.
   const int room = Serial.availableForWrite();
   if (room <= 0) return;
   uint8_t n = (uint8_t)(statusLen - statusPos);
   if ((int)n > room) n = (uint8_t)room;
   Serial.write((const uint8_t*)&statusBuf[statusPos], n);
   statusPos += n;
+#else
+  // ARM/mbed (Nano 33 BLE): USB CDC nativo. availableForWrite() del core
+  // siempre devuelve 0 (no está implementado), así que el drenado por trozos
+  // no funcionaría. write() es no-op si el host no está conectado y sobre USB
+  // nativo el envío de la línea completa es rápido y no bloquea de forma
+  // apreciable la generación de pasos. Se envía la línea de una vez.
+  Serial.write((const uint8_t*)&statusBuf[statusPos], (size_t)(statusLen - statusPos));
+  statusPos = statusLen;
+#endif
 }
 
 // =============================================================

@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 # VID conocidos de Arduino y chips USB-Serial comunes (clones incluidos)
 KNOWN_VIDS = {
-    0x2341,  # Arduino LLC / Arduino SA
+    0x2341,  # Arduino LLC / Arduino SA (incluye Nano 33 BLE por USB nativo nRF52840)
     0x2A03,  # Arduino (alternativo)
     0x1B4F,  # SparkFun
     0x239A,  # Adafruit
@@ -20,7 +20,7 @@ KNOWN_VIDS = {
     0x0403,  # FTDI
     0x067B,  # Prolific (PL2303)
     0x16C0,  # Teensyduino
-    0x03EB,  # Atmel (Nano Every usa ATSAMD11 como puente)
+    0x03EB,  # Atmel (Nano Every usa ATSAMD11 como puente USB-Serial)
 }
 
 # Palabras clave en la descripción del dispositivo

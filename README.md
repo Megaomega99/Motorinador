@@ -14,7 +14,7 @@ Motorinador es una aplicación web que te permite **controlar y monitorear un mo
 
 | Componente | Descripción |
 |---|---|
-| **Arduino Nano Every** | La tarjeta electrónica que habla con el motor |
+| **Arduino Nano 33 BLE** | La tarjeta electrónica que habla con el motor (nRF52840, 3.3 V). El mismo firmware también sigue compilando para el **Arduino Nano Every** |
 | **Driver TMC2208** | El controlador del motor (modo STEP/DIR) |
 | **Motor NEMA17 17HS4401** | El motor paso a paso |
 | **Encoder E38S6G5-600B-G24N** | El sensor que mide la velocidad real |
@@ -27,7 +27,20 @@ Motorinador es una aplicación web que te permite **controlar y monitorear un mo
 
 > **Antes de conectar cualquier cosa, asegúrate de que todo esté apagado.**
 
-### Driver TMC2208 → Arduino Nano Every
+> **Nota sobre la placa (Nano 33 BLE vs Nano Every).** Las conexiones son
+> **idénticas** en ambas placas: se usan los mismos números de pin (D4–D11) y
+> ocupan la misma posición física en el conector, así que **no cambia ningún
+> cable**. La diferencia es que el Nano 33 BLE trabaja a **3.3 V** (el Nano Every
+> a 5 V):
+> - **STEP/DIR/EN** del TMC2208 funcionan con 3.3 V (asegúrate de que la
+>   alimentación lógica `VIO` del driver sea 3.3 V o compatible con 3.3 V).
+> - **Encoder:** aliméntalo con su **fuente externa** y deja la señal en
+>   open-collector apoyada en el **pull-up interno** del Arduino (activado por
+>   firmware). En el Nano 33 BLE ese pull-up va a 3.3 V, por lo que las entradas
+>   D7/D8 nunca superan 3.3 V. **No añadas resistencias de pull-up a 5 V** en el
+>   Nano 33 BLE: eso metería 5 V en un pin de 3.3 V y podría dañar la placa.
+
+### Driver TMC2208 → Arduino
 
 El driver recibe las órdenes del Arduino a través de tres cables:
 
@@ -59,35 +72,38 @@ La actualización de D9 y D10 ocurre dentro de las ISRs del encoder (post-deboun
 
 Conecta las dos bobinas del motor a los terminales `A1/A2` y `B1/B2` del driver siguiendo el esquema de colores del fabricante (normalmente están marcados en el motor o en su hoja de datos).
 
-### Encoder → Arduino Nano Every
+### Encoder → Arduino
 
 El encoder tiene 5 cables. Conéctalos así:
 
 ```
 Encoder (color)      Arduino / Circuito
 ───────────────      ──────────────────
-  Rojo               5 V  (alimentación)
-  Negro              GND  (tierra)
-  Blanco  (canal A)  D7   + resistencia 4.7 kΩ a 5 V  ①
-  Verde   (canal B)  D8   + resistencia 4.7 kΩ a 5 V  ①
+  Rojo               Fuente externa (+)  (alimentación del encoder)
+  Negro              GND  (tierra común con el Arduino)
+  Blanco  (canal A)  D7   (pull-up interno del Arduino)  ①
+  Verde   (canal B)  D8   (pull-up interno del Arduino)  ①
 ```
 
-> ① **Resistencia de pull-up:** Conecta una resistencia de 4.7 kΩ entre el cable de señal (blanco o verde) y el pin de 5 V del Arduino. Esto es necesario porque el encoder tiene salida de tipo "colector abierto" — sin la resistencia la señal no funciona correctamente.
+> ① **Salida open-collector (NPN):** el firmware activa el **pull-up interno** de
+> D7/D8, así que **no hacen falta resistencias externas**. El nivel alto lo fija
+> el pull-up interno (3.3 V en el Nano 33 BLE, 5 V en el Nano Every), por lo que
+> en el 33 BLE la señal nunca supera 3.3 V. La tierra (Negro) del encoder debe
+> ser **común** con la del Arduino.
 
 ### Diagrama simplificado
 
 ```
  ┌──────────────────────────────────────────────┐
- │              Arduino Nano Every               │
+ │       Arduino Nano 33 BLE / Nano Every        │
  │                                              │
  │  D4 ──────── STEP ──┐                        │
  │  D5 ──────── DIR  ──┤  Driver TMC2208 ──── Motor NEMA17
  │  D6 ──────── EN   ──┘                        │
  │                                              │
- │  D7 ──[4.7kΩ]──5V   ← Canal A (blanco)  ←──┤
- │  D8 ──[4.7kΩ]──5V   ← Canal B (verde)   ←──┤  Encoder
- │  5V ──────────────── Rojo                ←──┤
- │  GND ─────────────── Negro               ←──┘
+ │  D7 ←── Canal A (blanco)  [pull-up interno] ←──┤
+ │  D8 ←── Canal B (verde)   [pull-up interno] ←──┤  Encoder
+ │  GND ─────────────── Negro (tierra común)  ←──┤  (Rojo → fuente externa)
  │                                              │
  │  D9  ───────────────────────────────────────→  Osciloscopio (canal A)
  │  D10 ───────────────────────────────────────→  Osciloscopio (canal B)
@@ -119,9 +135,20 @@ pip install -r backend/requirements.txt
 
 ### 2. Carga el firmware en el Arduino
 
-1. Abre el archivo `src/main.cpp` en **PlatformIO** (o Arduino IDE).
-2. Conecta el Arduino por USB.
-3. Sube el programa al Arduino.
+Con **PlatformIO** el proyecto define dos entornos en `platformio.ini`:
+
+| Placa | Entorno | Comando de carga |
+|---|---|---|
+| **Arduino Nano 33 BLE** | `nano33ble` | `pio run -e nano33ble -t upload` |
+| **Arduino Nano Every** | `nano_every` | `pio run -e nano_every -t upload` |
+
+1. Conecta el Arduino por USB.
+2. Ejecuta el comando de carga correspondiente a tu placa (o usa el botón *Upload*
+   de la extensión de PlatformIO seleccionando el entorno adecuado).
+
+> En el Nano 33 BLE el `upload` hace automáticamente el "touch" a 1200 bps para
+> entrar al bootloader; no necesitas pulsar reset manualmente en condiciones
+> normales.
 
 Esto solo se hace una vez. Después el Arduino recuerda el programa aunque se desconecte.
 
