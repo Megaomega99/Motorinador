@@ -27,18 +27,33 @@ Motorinador es una aplicación web que te permite **controlar y monitorear un mo
 
 > **Antes de conectar cualquier cosa, asegúrate de que todo esté apagado.**
 
-> **Nota sobre la placa (Nano 33 BLE vs Nano Every).** Las conexiones son
-> **idénticas** en ambas placas: se usan los mismos números de pin (D4–D11) y
-> ocupan la misma posición física en el conector, así que **no cambia ningún
-> cable**. La diferencia es que el Nano 33 BLE trabaja a **3.3 V** (el Nano Every
-> a 5 V):
-> - **STEP/DIR/EN** del TMC2208 funcionan con 3.3 V (asegúrate de que la
->   alimentación lógica `VIO` del driver sea 3.3 V o compatible con 3.3 V).
-> - **Encoder:** aliméntalo con su **fuente externa** y deja la señal en
->   open-collector apoyada en el **pull-up interno** del Arduino (activado por
->   firmware). En el Nano 33 BLE ese pull-up va a 3.3 V, por lo que las entradas
->   D7/D8 nunca superan 3.3 V. **No añadas resistencias de pull-up a 5 V** en el
->   Nano 33 BLE: eso metería 5 V en un pin de 3.3 V y podría dañar la placa.
+> **⚠️ Nota sobre la placa (Nano 33 BLE vs Nano Every).** Las conexiones usan los
+> **mismos números de pin (D4–D11)** en ambas placas, así que a nivel de esquema
+> **no cambia ningún cable**. La diferencia crítica es que el **Nano 33 BLE es de
+> 3.3 V y NO tolera 5 V** (el Nano Every es de 5 V y sí tolera). En el 33 BLE:
+>
+> **REGLA DE ORO: ningún pin puede superar 3.3 V, nunca.** Un solo roce del rail
+> de 14–24 V (Vcc del encoder o VM del motor) contra un pin de 3.3 V **fríe la
+> placa al instante**. Enruta esos cables lejos de la fila D4–D11 y de 3.3 V, y
+> fíjalos para que no puedan tocarlos.
+>
+> - **STEP/DIR/EN** del TMC2208: salidas del Arduino a 3.3 V. Asegúrate de que la
+>   alimentación lógica `VIO` del driver sea 3.3 V (o compatible con 3.3 V).
+> - **Encoder (open-collector NPN):** su salida **solo tira a masa**; el nivel
+>   alto lo pone el **pull-up interno** del Arduino (a 3.3 V), así que aunque
+>   alimentes el encoder a 5–24 V, **A/B nunca superan 3.3 V** y se conectan
+>   **directo a D7/D8** (sin conversor de nivel). **NUNCA** pongas un pull-up
+>   externo a 5/14/24 V — eso sí metería sobretensión en un pin de 3.3 V.
+>   - **Antes de fiarte, verifícalo** (los "NPN" de bazar varían entre lotes):
+>     alimenta el encoder, pon 10 kΩ de A a 3.3 V (sin el Arduino) y gira el eje.
+>     Debe alternar **0 V ↔ ~3.3 V**. Si ves más de 3.3 V, la salida "empuja" a
+>     Vcc → necesitas un **conversor de nivel** y NO conectar directo.
+>   - **Protección recomendada:** **1 kΩ en serie** en A y B (encoder→D7/D8). No
+>     cambia el funcionamiento y protege el GPIO de picos/rebote de masa del motor
+>     y de un roce accidental.
+> - **Masa en estrella:** une Arduino GND, encoder GND y GND de la fuente del
+>   motor en **un solo punto**, no en cadena, para minimizar el rebote de tierra
+>   del motor.
 
 ### Driver TMC2208 → Arduino
 
@@ -79,17 +94,23 @@ El encoder tiene 5 cables. Conéctalos así:
 ```
 Encoder (color)      Arduino / Circuito
 ───────────────      ──────────────────
-  Rojo               Fuente externa (+)  (alimentación del encoder)
-  Negro              GND  (tierra común con el Arduino)
-  Blanco  (canal A)  D7   (pull-up interno del Arduino)  ①
-  Verde   (canal B)  D8   (pull-up interno del Arduino)  ①
+  Rojo               Fuente externa +   (5–24 V; en la práctica ≥ ~7 V)  ②
+  Negro              GND  (tierra común, en estrella, con el Arduino)
+  Blanco  (canal A)  D7   [+ 1 kΩ en serie recomendado]  ①
+  Verde   (canal B)  D8   [+ 1 kΩ en serie recomendado]  ①
 ```
 
 > ① **Salida open-collector (NPN):** el firmware activa el **pull-up interno** de
-> D7/D8, así que **no hacen falta resistencias externas**. El nivel alto lo fija
-> el pull-up interno (3.3 V en el Nano 33 BLE, 5 V en el Nano Every), por lo que
-> en el 33 BLE la señal nunca supera 3.3 V. La tierra (Negro) del encoder debe
-> ser **común** con la del Arduino.
+> D7/D8, así que **no hacen falta resistencias de pull-up externas**. El nivel
+> alto lo fija el pull-up interno (3.3 V en el Nano 33 BLE, 5 V en el Nano Every),
+> por lo que en el 33 BLE la señal nunca supera 3.3 V. Se recomienda **1 kΩ en
+> serie** en cada canal como protección del GPIO (opcional pero barato). La tierra
+> (Negro) debe ser **común** con la del Arduino.
+>
+> ② El encoder E38S6G5-600B-G24N admite 5–24 V, pero lleva un regulador interno
+> (78M05) con ~2 V de dropout: a 5 V va justo/inestable, así que **aliméntalo con
+> ≥ ~7 V** (p. ej. 12 V). Esa tensión **solo** alimenta el encoder; **jamás debe
+> tocar A, B ni ningún pin del Arduino** (ver la REGLA DE ORO arriba).
 
 ### Diagrama simplificado
 
@@ -101,9 +122,9 @@ Encoder (color)      Arduino / Circuito
  │  D5 ──────── DIR  ──┤  Driver TMC2208 ──── Motor NEMA17
  │  D6 ──────── EN   ──┘                        │
  │                                              │
- │  D7 ←── Canal A (blanco)  [pull-up interno] ←──┤
- │  D8 ←── Canal B (verde)   [pull-up interno] ←──┤  Encoder
- │  GND ─────────────── Negro (tierra común)  ←──┤  (Rojo → fuente externa)
+ │  D7 ←─[1kΩ]── Canal A (blanco)  [pull-up int.] ←──┤
+ │  D8 ←─[1kΩ]── Canal B (verde)   [pull-up int.] ←──┤  Encoder
+ │  GND ─────────────── Negro (tierra común)      ←──┤  (Rojo → fuente ext. ≥7 V)
  │                                              │
  │  D9  ───────────────────────────────────────→  Osciloscopio (canal A)
  │  D10 ───────────────────────────────────────→  Osciloscopio (canal B)
