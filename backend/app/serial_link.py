@@ -16,21 +16,11 @@ from .state import motor_state
 
 logger = logging.getLogger(__name__)
 
-# [PI]  Tgt:30.0RPM  Meas:28.5RPM  Err:1.5  Ctrl:30.2RPM  Ang:185.4deg  Dir:FWD  CORRIENDO
-_STATUS_PI_RE = re.compile(
-    r"\[PI\]\s+Tgt:([-+]?\d+\.?\d*)RPM\s+"
-    r"Meas:([-+]?\d+\.?\d*)RPM\s+"
-    r"Err:([-+]?\d+\.?\d*)\s+"
-    r"Ctrl:([-+]?\d+\.?\d*)RPM\s+"
-    r"Ang:([-+]?\d+\.?\d*)deg\s+"
-    r"Dir:(FWD|REV)\s+"
-    r"(CORRIENDO|PARADO)"
-)
-
-# [LIBRE]  Tgt:30.0RPM  Real:28.5RPM  Ang:185.4deg  Dir:FWD  CORRIENDO
-_STATUS_LIBRE_RE = re.compile(
-    r"\[LIBRE\]\s+Tgt:([-+]?\d+\.?\d*)RPM\s+"
-    r"Real:([-+]?\d+\.?\d*)RPM\s+"
+# Tgt:30.0RPM  Mot:-29.8RPM  Enc:-59.2RPM  Ang:185.4deg  Dir:REV  CORRIENDO
+_STATUS_RE = re.compile(
+    r"Tgt:([-+]?\d+\.?\d*)RPM\s+"
+    r"Mot:([-+]?\d+\.?\d*)RPM\s+"
+    r"Enc:([-+]?\d+\.?\d*)RPM\s+"
     r"Ang:([-+]?\d+\.?\d*)deg\s+"
     r"Dir:(FWD|REV)\s+"
     r"(CORRIENDO|PARADO)"
@@ -39,46 +29,40 @@ _STATUS_LIBRE_RE = re.compile(
 # Comandos de un carácter aceptados por el firmware (idempotentes salvo +/-).
 # '+'/'-' no los emite ningún flujo del backend hoy (la UI usa objetivos
 # absolutos vía 'v'), pero se permiten por ser parte del protocolo.
-# Los toggles legados 's'/'r'/'c' existen en firmware pero el backend no los usa.
-VALID_CMDS = frozenset({"+", "-", "z", "0", "1", "e", "f", "b", "p", "l"})
+# Los toggles legados 's'/'r' existen en firmware pero el backend no los usa.
+VALID_CMDS = frozenset({"+", "-", "z", "0", "1", "e", "f", "b"})
 
 
 def _parse_line(line: str) -> Optional[StatusFrame]:
-    m = _STATUS_PI_RE.search(line)
-    if m:
-        ctrl = float(m.group(4))
-        return StatusFrame(
-            use_pid=True,
-            target_rpm=float(m.group(1)),
-            real_rpm=float(m.group(2)),
-            measured_rpm=float(m.group(2)),
-            pi_error=float(m.group(3)),
-            control_rpm=ctrl,
-            angle_deg=float(m.group(5)),
-            dir=m.group(6),
-            running=m.group(7) == "CORRIENDO",
-            ts=time.time(),
-        )
-
-    m = _STATUS_LIBRE_RE.search(line)
-    if m:
-        return StatusFrame(
-            use_pid=False,
-            target_rpm=float(m.group(1)),
-            real_rpm=float(m.group(2)),
-            angle_deg=float(m.group(3)),
-            dir=m.group(4),
-            running=m.group(5) == "CORRIENDO",
-            ts=time.time(),
-        )
-
-    return None
+    m = _STATUS_RE.search(line)
+    if not m:
+        return None
+    return StatusFrame(
+        target_rpm=float(m.group(1)),
+        motor_rpm=float(m.group(2)),
+        enc_rpm=float(m.group(3)),
+        angle_deg=float(m.group(4)),
+        dir=m.group(5),
+        running=m.group(6) == "CORRIENDO",
+        ts=time.time(),
+    )
 
 
 def _enrich(frame: StatusFrame, params: Params) -> StatusFrame:
-    omega = frame.real_rpm * 2 * math.pi / 60
+    """Añade magnitudes derivadas de la velocidad **del motor**.
+
+    La rueda va en el eje del motor (el encoder es solo instrumento, y además
+    gira más rápido por los engranajes), así que la velocidad lineal se calcula
+    con la RPM del motor medida. ``slip_pct`` compara consigna y medida: si el
+    motor sigue el tren de pasos es ~0; si pierde pasos o se atasca, sube.
+    """
+    omega = frame.motor_rpm * 2 * math.pi / 60
     v = omega * (params.radius_cm / 100.0)
-    return frame.model_copy(update={"omega_rad_s": round(omega, 4), "v_m_s": round(v, 4)})
+    update = {"omega_rad_s": round(omega, 4), "v_m_s": round(v, 4)}
+    if frame.running and frame.target_rpm > 0:
+        slip = (1.0 - abs(frame.motor_rpm) / frame.target_rpm) * 100.0
+        update["slip_pct"] = round(max(0.0, min(100.0, slip)), 1)
+    return frame.model_copy(update=update)
 
 
 class SerialLink:
@@ -149,7 +133,6 @@ class SerialLink:
         if frame:
             frame = _enrich(frame, motor_state.params)
             motor_state.last_status = frame
-            motor_state.use_pid = frame.use_pid
             await motor_state.broadcast(WsStatus(data=frame))
         else:
             level = "warn" if "error" in line.lower() else "info"
@@ -207,9 +190,6 @@ class SerialLink:
 
     async def cmd_set_direction(self, forward: bool) -> None:
         await self.send("f" if forward else "b")
-
-    async def cmd_set_mode(self, pid: bool) -> None:
-        await self.send("p" if pid else "l")
 
     async def cmd_zero_encoder(self) -> None:
         await self.send("z")

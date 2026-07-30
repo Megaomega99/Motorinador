@@ -104,10 +104,6 @@ async def _handle_client_message(raw: str) -> None:
                 await serial_link.cmd_set_direction(forward=True)
             case "dir_rev":
                 await serial_link.cmd_set_direction(forward=False)
-            case "mode_pi":
-                await serial_link.cmd_set_mode(pid=True)
-            case "mode_libre":
-                await serial_link.cmd_set_mode(pid=False)
 
     elif msg_type == "set_target":
         target_msg = SetTargetMessage.model_validate(data)
@@ -116,9 +112,9 @@ async def _handle_client_message(raw: str) -> None:
         serial_link.schedule_set_target(target_msg.rpm)
 
     elif msg_type == "set_params":
+        # Los rangos válidos los impone el modelo Params; un valor fuera de
+        # rango levanta ValidationError y el llamante lo reporta al cliente.
         params_msg = SetParamsMessage.model_validate(data)
-        if params_msg.data.radius_cm <= 0:
-            raise ValueError("radius_cm debe ser > 0")
         # Los límites de RPM son propiedad del servidor (espejo del firmware):
         # se ignora cualquier valor enviado por el cliente.
         motor_state.params = params_msg.data.model_copy(

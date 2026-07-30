@@ -24,7 +24,7 @@
     --red-deep:    #a01a11;
     --wood:        #b9854b;
     --wood-dark:   #6f4a23;
-    --pid:         #3a6ea8;   /* azul PD */
+    --pid:         #3a6ea8;   /* azul de acento (tarjeta de seguimiento) */
     --pid-light:   #d0e4f7;
     --shadow:      0 1px 0 #fff7e2 inset, 0 1px 2px rgba(80,50,15,.08), 0 8px 24px -16px rgba(80,50,15,.25);
   }
@@ -175,14 +175,8 @@
     background: var(--ink); color: #fff7e2;
     box-shadow: 0 2px 6px rgba(80,50,15,.25);
   }
-  /* PID mode active variant */
-  .seg.pid-seg button.on {
-    background: var(--pid); color: #fff;
-    box-shadow: 0 2px 6px rgba(58,110,168,.35);
-  }
-
-  /* PID info card */
-  .pid-card {
+  /* Tarjeta de seguimiento: consigna vs medido vs deslizamiento */
+  .track-card {
     background: var(--pid-light);
     border: 1px solid #a8c8e8;
     border-radius: 12px;
@@ -190,11 +184,22 @@
     font-family: "IBM Plex Mono", monospace;
     font-size: 11px; line-height: 2;
     color: var(--ink-soft);
+    transition: background .2s, border-color .2s;
   }
-  .pid-card b { color: var(--ink); }
-  .pid-card .pid-val-target { color: var(--pid); }
-  .pid-card .pid-val-err    { color: var(--orange); }
-  .pid-card .pid-val-out    { color: var(--leaf); }
+  .track-card b { color: var(--ink); }
+  .track-card #trkTgt  { color: var(--pid); }
+  .track-card #trkMot  { color: var(--leaf); }
+  .track-card #trkSlip { color: var(--ink-soft); }
+  /* Deslizamiento alto = el motor NO sigue la consigna (pasos perdidos) */
+  .track-card.slipping {
+    background: #fdeee9; border-color: rgba(217,43,31,.45);
+  }
+  .track-card.slipping #trkSlip { color: var(--red); font-weight: 700; }
+  .track-note {
+    margin-top: 6px; padding-top: 6px;
+    border-top: 1px dashed rgba(80,50,15,.18);
+    font-size: 10px; line-height: 1.5; opacity: .75;
+  }
 
   /* ────────── STAGE (center) ────────── */
   .stage {
@@ -228,7 +233,6 @@
     font-size: 20px; letter-spacing: -0.01em;
   }
   .stage-head .title em { font-style: italic; color: var(--orange); }
-  .stage-head .title em.pid-em { color: var(--pid); }
   .stage-head .dot {
     display: inline-flex; align-items: center; gap: 8px;
     font-family: "IBM Plex Mono", monospace; font-size: 11px;
@@ -283,10 +287,6 @@
   .gauge.target .val { color: var(--orange); }
   .gauge.real   .val { color: var(--ink); }
   .gauge.linear .val { color: var(--wood-dark); }
-  /* PID mode gauge overrides */
-  .gauge.target.pid-mode .val  { color: var(--pid); }
-  .gauge.target.pid-mode       { border-color: #a8c8e8; }
-  .gauge.linear.pid-mode .val  { color: var(--orange); }
 
   /* Big red button */
   .start-row { display: flex; align-items: center; gap: 18px; margin-top: 16px; }
@@ -303,7 +303,6 @@
   }
   .led.on   { background: var(--leaf); box-shadow: 0 0 8px rgba(106,138,62,.7), inset 0 0 0 1px rgba(0,0,0,.15); }
   .led.warn { background: var(--amber); box-shadow: 0 0 8px rgba(241,176,74,.7); }
-  .led.pid  { background: var(--pid); box-shadow: 0 0 8px rgba(58,110,168,.7), inset 0 0 0 1px rgba(0,0,0,.15); }
 
   .bigbtn {
     position: relative; appearance: none; border: 0;
@@ -372,7 +371,6 @@
   }
   .pill:hover { background: #f7ead0; }
   .pill.danger { color: var(--red); border-color: rgba(217,43,31,.4); }
-  .pill.pid-pill { color: var(--pid); border-color: rgba(58,110,168,.4); }
 
   /* footer strip */
   .footstrip {
@@ -397,7 +395,6 @@
     display: flex; align-items: center; gap: 8px;
   }
   .group-title::after { content: ""; flex: 1; height: 1px; background: var(--line-soft); }
-  .group-title.pid-group { color: var(--pid); }
 </style>
 </head>
 <body>
@@ -422,7 +419,7 @@
     </div>
     <div class="brand-words">
       <div class="name">Motorin<em>ador</em></div>
-      <div class="tag">NEMA17 · TMC2208 · ENCODER X4 · PI-IMC</div>
+      <div class="tag">NEMA17 · TMC2208 · ENCODER X4 · LAZO ABIERTO</div>
     </div>
   </div>
   <div class="app-logo" title="Megaomega">
@@ -436,44 +433,33 @@
     <h2>Parámetros</h2>
     <div class="sub">Control · Encoder · Mecánica</div>
 
-    <!-- ── Modo de control ── -->
-    <div class="group-title" id="modeGroupTitle">Modo de Control</div>
-    <div class="seg pid-seg" id="modeSeg">
-      <button data-v="libre" class="on">⚙ Lazo Abierto</button>
-      <button data-v="pid">⊕ Lazo PI</button>
+    <!-- ── Control del motor: activado, velocidad y dirección ── -->
+    <div class="group-title">Velocidad objetivo <span class="unit">del motor</span></div>
+    <div class="field">
+      <label>Target RPM <span class="unit" id="rpmUnit">1 rpm</span></label>
+      <input id="rpm" type="range" min="1" max="120" step="1" value="1">
     </div>
-
-    <!-- ── Controles modo LIBRE ── -->
-    <div id="libreControls">
-      <div class="divider"></div>
-      <div class="group-title">Velocidad objetivo</div>
-      <div class="field">
-        <label>Target RPM <span class="unit" id="rpmUnit">1 rpm</span></label>
-        <input id="rpm" type="range" min="1" max="120" step="1" value="1">
-      </div>
-      <div class="field">
-        <label>Valor exacto <span class="unit">rpm</span></label>
-        <input id="rpmNum" type="number" min="1" max="120" step="1" value="1">
-      </div>
-      <div class="field">
-        <label>Sentido de giro</label>
-        <div class="seg" id="dirSeg">
-          <button data-v="fwd" class="on">↻ Adelante</button>
-          <button data-v="rev">↺ Reversa</button>
-        </div>
+    <div class="field">
+      <label>Valor exacto <span class="unit">rpm</span></label>
+      <input id="rpmNum" type="number" min="1" max="120" step="1" value="1">
+    </div>
+    <div class="field">
+      <label>Sentido de giro</label>
+      <div class="seg" id="dirSeg">
+        <button data-v="fwd" class="on">↻ Adelante</button>
+        <button data-v="rev">↺ Reversa</button>
       </div>
     </div>
 
-    <!-- ── Estado modo PID (oculto en libre) ── -->
-    <div id="pidControls" style="display:none">
-      <div class="divider"></div>
-      <div class="group-title pid-group">Estado PI · IMC</div>
-      <div class="pid-card">
-        <div>Tgt RPM &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b class="pid-val-target" id="piTgtRpm">0.0</b> <span style="opacity:.6">RPM</span></div>
-        <div>Meas RPM &nbsp;&nbsp;&nbsp;&nbsp;<b id="piMeas">0.0</b> <span style="opacity:.6">RPM</span></div>
-        <div>Error &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b class="pid-val-err" id="piErr">0.0</b> <span style="opacity:.6">RPM</span></div>
-        <div>Ctrl RPM &nbsp;&nbsp;&nbsp;&nbsp;<b class="pid-val-out" id="piCtrl">0.0</b> <span style="opacity:.6">RPM</span></div>
-      </div>
+    <!-- ── Seguimiento: ¿sigue el motor la consigna? ── -->
+    <div class="divider"></div>
+    <div class="group-title">Seguimiento del motor</div>
+    <div class="track-card" id="trackCard">
+      <div>Consigna &nbsp;&nbsp;&nbsp;<b id="trkTgt">0.0</b> <span style="opacity:.6">RPM</span></div>
+      <div>Motor medido &nbsp;<b id="trkMot">0.0</b> <span style="opacity:.6">RPM</span></div>
+      <div>Encoder &nbsp;&nbsp;&nbsp;&nbsp;<b id="trkEnc">0.0</b> <span style="opacity:.6">RPM</span></div>
+      <div>Deslizamiento <b id="trkSlip">—</b> <span style="opacity:.6">%</span></div>
+      <div class="track-note" id="trkNote">El encoder mide la transmisión, no el eje del motor.</div>
     </div>
 
     <div class="divider"></div>
@@ -481,6 +467,13 @@
     <div class="field">
       <label>Radio de la rueda <span class="unit">cm</span></label>
       <input id="radius" type="number" min="1" max="40" step="0.5" value="12">
+    </div>
+
+    <div class="divider"></div>
+    <div class="group-title">Transmisión motor → encoder</div>
+    <div class="field">
+      <label>Vueltas de encoder por vuelta de motor <span class="unit">medido 1.986</span></label>
+      <input id="gearRatio" type="number" min="0.1" max="50" step="0.001" value="1.986">
     </div>
 
     <div class="divider"></div>
@@ -605,11 +598,11 @@
 
     <div class="gauges">
       <div class="gauge target" id="g1">
-        <div class="lbl" id="g1Lbl">Velocidad objetivo</div>
+        <div class="lbl" id="g1Lbl">Consigna · motor</div>
         <div class="val"><span id="gTarget">1.0</span><small id="g1Unit">RPM</small></div>
       </div>
       <div class="gauge real" id="g2">
-        <div class="lbl" id="g2Lbl">Velocidad real · encoder</div>
+        <div class="lbl" id="g2Lbl">Motor medido · encoder ÷ relación</div>
         <div class="val"><span id="gReal">0.0</span><small id="g2Unit">RPM</small></div>
       </div>
       <div class="gauge linear" id="g3">
@@ -623,7 +616,7 @@
         <div class="led" id="ledPower"></div> <span>Driver</span>
         <div class="led warn" id="ledEnc"></div> <span>Encoder</span>
         <div class="led" id="ledMotor"></div> <span>Motor</span>
-        <div class="led warn" id="ledPid"></div> <span id="ledModeTag">LIBRE</span>
+        <div class="led" id="ledSlip"></div> <span id="ledSlipTag">SIGUE</span>
         <span style="margin-left:auto;color:var(--ink-soft)">Ang: <b id="gAng" style="color:var(--ink)">0.0°</b></span>
       </div>
       <button class="bigbtn" id="startBtn">
@@ -650,7 +643,8 @@
     <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.9;color:var(--ink-soft)">
       <div>f_STEP &nbsp;= <span id="tStepF" style="color:var(--ink)">800</span> Hz</div>
       <div>T_half &nbsp;= <span id="tHalf" style="color:var(--ink)">625</span> µs</div>
-      <div>counts/rev &nbsp;= <span id="tCpr" style="color:var(--ink)">2400</span></div>
+      <div>counts/rev enc &nbsp;= <span id="tCpr" style="color:var(--ink)">2400</span></div>
+      <div>pasos/rev motor &nbsp;= <span id="tSpr" style="color:var(--ink)">1600</span></div>
       <div>perímetro &nbsp;= <span id="tPerim" style="color:var(--ink)">75.4</span> cm</div>
       <div>tiempo activo &nbsp;= <span id="tElapsed" style="color:var(--ink)">00:00</span></div>
     </div>
@@ -658,7 +652,7 @@
 
   <div class="footstrip">
     <div class="left"><span>FastAPI · ws://motor/control</span></div>
-    <div>v5.0 · PI-IMC · 2026-05</div>
+    <div>v6.0 · lazo abierto + engranajes · 2026-07</div>
   </div>
 </main>
 

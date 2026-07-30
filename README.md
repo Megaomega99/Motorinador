@@ -8,6 +8,28 @@ Control en tiempo real de una rueda de hámster motorizada desde el navegador.
 
 Motorinador es una aplicación web que te permite **controlar y monitorear un motor eléctrico** conectado a tu computador a través de un cable USB. Desde cualquier navegador puedes arrancar el motor, cambiar su velocidad y dirección, ver cuántas vueltas da por minuto, y más — sin necesidad de tocar código.
 
+El control es de **tres cosas**: activado, velocidad y dirección. No hay lazo de
+realimentación: un motor paso a paso con el TMC2208 sigue el tren de pasos con
+exactitud, así que la velocidad **es** la que se le pide mientras no pierda paso.
+El encoder no cierra ningún lazo — es el **instrumento** que verifica si el motor
+siguió la consigna y delata pasos perdidos o atascos.
+
+> **La transmisión es por engranajes.** El encoder no está en el eje del motor:
+> da ≈**1.99 vueltas por cada vuelta del motor** (medido sobre datos reales; el
+> nominal supuesto era 2.1). Por eso la interfaz distingue *velocidad del
+> encoder* de *velocidad del motor* = encoder ÷ relación, y solo la segunda es
+> comparable con la consigna.
+
+> Hubo un controlador PI (diseño IMC) sobre la velocidad del encoder. **Se
+> retiró** al montar los engranajes: la consigna pasaba a significar dos cosas
+> distintas según el modo y, ante un atasco, el integrador saturaba y el firmware
+> acababa comandando el máximo a un motor bloqueado. El razonamiento completo, con
+> las medidas, está en
+> [docs/superpowers/specs/2026-07-29-motor-signal-y-retirada-del-PI-design.md](docs/superpowers/specs/2026-07-29-motor-signal-y-retirada-del-PI-design.md).
+
+Para el análisis **offline** de las grabaciones (electrodos + encoder + señal del
+motor) hay una herramienta aparte: [analysis/README.md](analysis/README.md).
+
 ---
 
 ## Lo que necesitas
@@ -17,7 +39,7 @@ Motorinador es una aplicación web que te permite **controlar y monitorear un mo
 | **Arduino Nano 33 BLE** | La tarjeta electrónica que habla con el motor (nRF52840, 3.3 V). El mismo firmware también sigue compilando para el **Arduino Nano Every** |
 | **Driver TMC2208** | El controlador del motor (modo STEP/DIR) |
 | **Motor NEMA17 17HS4401** | El motor paso a paso |
-| **Encoder E38S6G5-600B-G24N** | El sensor que mide la velocidad real |
+| **Encoder E38S6G5-600B-G24N** | El sensor que verifica la velocidad real (va tras los engranajes) |
 | **Cable USB** | Para conectar el Arduino a la computadora |
 | **Fuente de poder para el motor** | El driver TMC2208 necesita su propia alimentación |
 
@@ -34,7 +56,7 @@ Motorinador es una aplicación web que te permite **controlar y monitorear un mo
 >
 > **REGLA DE ORO: ningún pin puede superar 3.3 V, nunca.** Un solo roce del rail
 > de 14–24 V (Vcc del encoder o VM del motor) contra un pin de 3.3 V **fríe la
-> placa al instante**. Enruta esos cables lejos de la fila D4–D11 y de 3.3 V, y
+> placa al instante**. Enruta esos cables lejos de la fila D2–D11 y de 3.3 V, y
 > fíjalos para que no puedan tocarlos.
 >
 > - **STEP/DIR/EN** del TMC2208: salidas del Arduino a 3.3 V. Asegúrate de que la
@@ -42,13 +64,13 @@ Motorinador es una aplicación web que te permite **controlar y monitorear un mo
 > - **Encoder (open-collector NPN):** su salida **solo tira a masa**; el nivel
 >   alto lo pone el **pull-up interno** del Arduino (a 3.3 V), así que aunque
 >   alimentes el encoder a 5–24 V, **A/B nunca superan 3.3 V** y se conectan
->   **directo a D7/D8** (sin conversor de nivel). **NUNCA** pongas un pull-up
+>   **directo a D2/D3** (sin conversor de nivel). **NUNCA** pongas un pull-up
 >   externo a 5/14/24 V — eso sí metería sobretensión en un pin de 3.3 V.
 >   - **Antes de fiarte, verifícalo** (los "NPN" de bazar varían entre lotes):
 >     alimenta el encoder, pon 10 kΩ de A a 3.3 V (sin el Arduino) y gira el eje.
 >     Debe alternar **0 V ↔ ~3.3 V**. Si ves más de 3.3 V, la salida "empuja" a
 >     Vcc → necesitas un **conversor de nivel** y NO conectar directo.
->   - **Protección recomendada:** **1 kΩ en serie** en A y B (encoder→D7/D8). No
+>   - **Protección recomendada:** **1 kΩ en serie** en A y B (encoder→D2/D3). No
 >     cambia el funcionamiento y protege el GPIO de picos/rebote de masa del motor
 >     y de un roce accidental.
 > - **Masa en estrella:** une Arduino GND, encoder GND y GND de la fuente del
@@ -76,18 +98,38 @@ Tres pines replican en tiempo real las señales internas para que puedas conecta
 ```
 Arduino           Señal replicada
 ───────           ───────────────
-  D9    ────────→  Canal A del encoder  (espejo de D7)
-  D10   ────────→  Canal B del encoder  (espejo de D8)
+  D9    ────────→  Canal A del encoder  (espejo de D2)
+  D10   ────────→  Canal B del encoder  (espejo de D3)
   D11   ────────→  STEP al driver       (espejo de D4)
 ```
 
 La actualización de D9 y D10 ocurre dentro de las ISRs del encoder (post-debounce), y la de D11 ocurre en el mismo instante que el pulso STEP real.
+
+**D11 es además la fuente de la velocidad del motor en las grabaciones.** En la
+toma con el Intan va a la entrada `ANALOG-IN-2`, donde queda registrado como una
+onda cuadrada de 3.3 V al 50 % de ciclo. Su frecuencia es el número de micropasos
+por segundo, así que de ella sale la velocidad **comandada** del motor, exacta y
+sin pasar por el encoder:
+
+```
+RPM_motor = f_STEP · 60 / 1600          (1600 micropasos por vuelta)
+```
+
+Tener las dos señales grabadas (consigna por D11, movimiento real por el encoder)
+es lo que permite medir la relación de engranajes y detectar pasos perdidos. Lo
+explota [analysis/](analysis/README.md).
 
 ### Motor NEMA17 → Driver TMC2208
 
 Conecta las dos bobinas del motor a los terminales `A1/A2` y `B1/B2` del driver siguiendo el esquema de colores del fabricante (normalmente están marcados en el motor o en su hoja de datos).
 
 ### Encoder → Arduino
+
+> **⚠️ Los pines del encoder cambiaron (2026-07-30): antes D7/D8, ahora D2/D3.**
+> D7 y D8 se dañaron. Si tienes el montaje antiguo cableado a D7/D8, mueve los dos
+> cables **y recarga el firmware** — los números de pin están compilados dentro, no
+> se configuran desde la interfaz. Ambas placas admiten interrupción en cualquier
+> pin digital, así que el cambio no tiene más consecuencias.
 
 El encoder tiene 5 cables. Conéctalos así:
 
@@ -96,12 +138,12 @@ Encoder (color)      Arduino / Circuito
 ───────────────      ──────────────────
   Rojo               Fuente externa +   (5–24 V; en la práctica ≥ ~7 V)  ②
   Negro              GND  (tierra común, en estrella, con el Arduino)
-  Blanco  (canal A)  D7   [+ 1 kΩ en serie recomendado]  ①
-  Verde   (canal B)  D8   [+ 1 kΩ en serie recomendado]  ①
+  Blanco  (canal A)  D2   [+ 1 kΩ en serie recomendado]  ①
+  Verde   (canal B)  D3   [+ 1 kΩ en serie recomendado]  ①
 ```
 
 > ① **Salida open-collector (NPN):** el firmware activa el **pull-up interno** de
-> D7/D8, así que **no hacen falta resistencias de pull-up externas**. El nivel
+> D2/D3, así que **no hacen falta resistencias de pull-up externas**. El nivel
 > alto lo fija el pull-up interno (3.3 V en el Nano 33 BLE, 5 V en el Nano Every),
 > por lo que en el 33 BLE la señal nunca supera 3.3 V. Se recomienda **1 kΩ en
 > serie** en cada canal como protección del GPIO (opcional pero barato). La tierra
@@ -122,8 +164,8 @@ Encoder (color)      Arduino / Circuito
  │  D5 ──────── DIR  ──┤  Driver TMC2208 ──── Motor NEMA17
  │  D6 ──────── EN   ──┘                        │
  │                                              │
- │  D7 ←─[1kΩ]── Canal A (blanco)  [pull-up int.] ←──┤
- │  D8 ←─[1kΩ]── Canal B (verde)   [pull-up int.] ←──┤  Encoder
+ │  D2 ←─[1kΩ]── Canal A (blanco)  [pull-up int.] ←──┤
+ │  D3 ←─[1kΩ]── Canal B (verde)   [pull-up int.] ←──┤  Encoder
  │  GND ─────────────── Negro (tierra común)      ←──┤  (Rojo → fuente ext. ≥7 V)
  │                                              │
  │  D9  ───────────────────────────────────────→  Osciloscopio (canal A)
@@ -227,7 +269,9 @@ http://localhost:8000
 
 ### Panel central — La rueda
 
-Muestra una animación en tiempo real de la rueda girando. La velocidad de la animación refleja las RPM reales medidas por el encoder, no las deseadas.
+Muestra una animación en tiempo real de la rueda girando. La velocidad de la animación
+refleja las RPM **del motor medidas** (encoder ÷ relación de engranajes), no las pedidas:
+si el motor se atasca, la rueda de la pantalla se frena con él.
 
 ### Panel derecho — Monitoreo
 
@@ -235,10 +279,13 @@ Muestra una animación en tiempo real de la rueda girando. La velocidad de la an
 |---|---|
 | 🟢 **POWER** | Verde = Arduino conectado y comunicándose |
 | 🟢 **ENCODER** | Verde = llegan datos frescos del encoder (se apaga si pasan >2.5 s sin datos). La velocidad medida sigue viva incluso con el motor en pausa |
-| **Target RPM** | La velocidad que le pediste al motor |
-| **Real RPM** | La velocidad que el encoder está midiendo realmente |
-| **Ángulo** | La posición angular acumulada del eje |
-| **Velocidad lineal** | Calculada a partir de las RPM reales y el radio configurado |
+| 🟢 **SIGUE / PIERDE PASOS** | Verde = el motor sigue la consigna; ámbar = deslizamiento > 10 %, está perdiendo pasos o atascado |
+| **Consigna · motor** | La velocidad que le pediste al motor |
+| **Motor medido** | Velocidad real del motor = encoder ÷ relación de engranajes |
+| **Encoder** | Velocidad del encoder en bruto (gira ≈2× más rápido que el motor) |
+| **Deslizamiento** | `1 − medido/consigna` en %. 0 % = sigue el tren de pasos |
+| **Ángulo** | La posición angular acumulada del eje del encoder |
+| **Velocidad lineal** | Calculada con las RPM **del motor** y el radio configurado (la rueda va en el eje del motor) |
 
 ### Botones de control
 
@@ -258,9 +305,8 @@ Muestra una animación en tiempo real de la rueda girando. La velocidad de la an
 | `1` / `0` | un carácter | Marcha / paro (idempotentes; `0` desenergiza el driver) |
 | `e` | un carácter | E-STOP incondicional (desenergiza e imprime `E-STOP`) |
 | `f` / `b` | un carácter | Dirección adelante / reversa (absoluta) |
-| `p` / `l` | un carácter | Modo PI / LIBRE (absoluto) |
 | `z` | un carácter | Encoder a cero |
-| `s` / `r` / `c` | un carácter | Toggles legados (solo uso manual por terminal) |
+| `s` / `r` | un carácter | Toggles legados (solo uso manual por terminal) |
 
 > Los límites de velocidad (`rpm_min`, `rpm_max`, `rpm_step`) los fija el servidor
 > como espejo de las constantes del firmware; los valores enviados por los clientes
@@ -288,8 +334,17 @@ La parte inferior muestra en tiempo real todos los mensajes que llegan del Ardui
 **El motor no se mueve aunque POWER esté verde**
 → Verifica que la fuente de alimentación del driver TMC2208 esté encendida.
 
-**Real RPM siempre muestra 0**
-→ Revisa las conexiones del encoder, especialmente las resistencias de pull-up de 4.7 kΩ.
+**Motor medido siempre muestra 0**
+→ Revisa las conexiones del encoder: canal A a **D2** y canal B a **D3** (¡cambiaron
+desde D7/D8!), y la tierra común. La consigna puede ir bien y el encoder no leer
+nada: son señales independientes. Si acabas de mover los cables, **recarga el
+firmware**: los pines están compilados dentro.
+
+**El indicador dice PIERDE PASOS constantemente**
+→ O el motor se está atascando de verdad (par insuficiente, algo roza), o la relación de
+engranajes configurada no es la real. Comprueba la relación con la herramienta de análisis
+(`Abrir carpeta de sesión` → *Medir en los datos*) y ponla en el campo «Vueltas de encoder
+por vuelta de motor».
 
 **La página no carga**
 → Verifica que el servidor esté corriendo (`python backend/main.py`) y que la dirección sea exactamente `http://localhost:8000`.

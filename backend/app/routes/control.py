@@ -48,8 +48,7 @@ async def get_params() -> Params:
 
 @router.put("/params", response_model=Params)
 async def update_params(params: Params) -> Params:
-    if params.radius_cm <= 0:
-        raise HTTPException(status_code=422, detail="radius_cm debe ser > 0")
+    # Los rangos válidos los impone el propio modelo (ver Params).
     # Los límites de RPM son propiedad del servidor (espejo del firmware):
     # se ignora cualquier valor enviado por el cliente.
     motor_state.params = params.model_copy(
@@ -77,10 +76,6 @@ async def post_cmd(cmd: str) -> dict:
             await serial_link.cmd_set_direction(forward=True)
         case "dir_rev":
             await serial_link.cmd_set_direction(forward=False)
-        case "mode_pi":
-            await serial_link.cmd_set_mode(pid=True)
-        case "mode_libre":
-            await serial_link.cmd_set_mode(pid=False)
     return {"ok": True, "cmd": cmd}
 
 

@@ -10,15 +10,39 @@
 //              y usa los mismos números de pin → NO cambian las conexiones.
 // Modo driver: standalone STEP/DIR  MS1=MS2=GND → 1/8 micropaso
 //
+// HISTÓRICO DE PINES: el encoder estaba en D7/D8; esos dos pines se dañaron y se
+// movió a D2/D3 (2026-07-30). Ambas placas admiten interrupción en cualquier pin
+// digital, así que el cambio no afecta al código más allá de las constantes.
+//
+// ── Control en lazo abierto (sin PI) ───────────────────────
+// El TMC2208 en STEP/DIR sigue el tren de pasos con exactitud: la velocidad del
+// motor ES la comandada mientras no pierda paso. Por eso NO hay lazo de
+// velocidad. El encoder se usa como INSTRUMENTO de verificación: mide la
+// velocidad real y delata pérdidas de paso comparándola con la consigna.
+//
+// Nota histórica: hubo un PI-IMC sobre la velocidad del encoder. Se retiró al
+// montar los engranajes porque (a) el encoder ya no mide el eje del motor sino
+// GEAR_RATIO veces más rápido, así que la consigna significaba dos cosas
+// distintas según el modo, y (b) ante un atasco el integrador saturaba y el
+// firmware acababa comandando RPM_MAX a un motor bloqueado. Ver
+// docs/superpowers/specs/2026-07-29-motor-signal-y-retirada-del-PI-design.md
+//
 // ── Conexiones driver ──────────────────────────────────────
 //   D4 → STEP    D5 → DIR    D6 → EN  (LOW = habilitado)
 //
 // ── Conexiones encoder (NPN open-collector) ────────────────
 //   Rojo  → alim. externa   Negro → GND
-//   Blanco → D7 (A)         Verde → D8 (B)
+//   Blanco → D2 (A)         Verde → D3 (B)
 //   Pull-up interno activado por software (Nano Every ~40 kΩ a 5 V;
 //   Nano 33 BLE ~13 kΩ a 3.3 V). Al ser salida open-collector, el nivel
 //   alto lo fija el pull-up interno → en el 33 BLE nunca supera 3.3 V (seguro).
+//
+// ── Salidas espejo (osciloscopio / grabación Intan) ────────
+//   D9 → canal A del encoder (espejo de D2)
+//   D10 → canal B (espejo de D3)
+//   D11 → pulso STEP (espejo de D4)
+//   D11 se graba en ANALOG-IN-2 del Intan: de su frecuencia sale la velocidad
+//   comandada del motor sin pasar por el encoder (ver analysis/motor.py).
 //
 // ── Control por Monitor Serial  115200 baud ────────────────
 //   ABSOLUTOS (idempotentes, usados por el backend):
@@ -26,11 +50,9 @@
 //     '1' → marcha        '0' → paro (desenergiza el driver)
 //     'e' → PARO DE EMERGENCIA (incondicional, desenergiza)
 //     'f' → dirección FWD 'b' → dirección REV
-//     'p' → modo PI       'l' → modo LIBRE (lazo abierto)
 //   RELATIVOS / LEGADO (uso manual por terminal):
 //     '+' → +1 RPM   '-' → -1 RPM
 //     's' → alternar paro/marcha   'r' → invertir dirección
-//     'c' → alternar PI ↔ LIBRE
 //   COMUNES:
 //     'z' → poner encoder a cero
 // =============================================================
@@ -44,8 +66,8 @@ const uint8_t PIN_ENC_OA   = 9;
 const uint8_t PIN_ENC_OB   = 10;
 const uint8_t PIN_STEP_OUT = 11;
 // ── Pines encoder ────────────────────────────────────────────
-const uint8_t PIN_ENC_A = 7;   // Canal A — interrupción CHANGE
-const uint8_t PIN_ENC_B = 8;   // Canal B — interrupción CHANGE
+const uint8_t PIN_ENC_A = 2;   // Canal A — interrupción CHANGE
+const uint8_t PIN_ENC_B = 3;   // Canal B — interrupción CHANGE
 
 // ── Parámetros mecánicos ─────────────────────────────────────
 // 200 pasos/rev × 8 micropasos = 1600 pulsos/vuelta
@@ -56,6 +78,15 @@ const uint16_t STEPS_PER_REV = 1600;
 const int32_t ENC_PPR        = 600;
 const int32_t COUNTS_PER_REV = ENC_PPR * 4;   // 2400 cuentas/vuelta
 
+// ── Transmisión motor → encoder (engranajes) ─────────────────
+// Vueltas de ENCODER por vuelta de MOTOR. El encoder ya no mide el eje del
+// motor: gira GEAR_RATIO veces más rápido, así que la velocidad medida hay que
+// dividirla por esta relación para compararla con la consigna.
+// Medido = 1.9861 sobre la toma `intento serio 2_260729_142804` (141 ventanas de
+// consigna estable), integrando micropasos comandados contra cuentas de encoder.
+// El valor nominal supuesto era 2.1, un 6 % alto.
+const float GEAR_RATIO = 1.986f;
+
 // ── Límites y paso de velocidad ──────────────────────────────
 const float RPM_MIN  =   1.0f;
 const float RPM_MAX  = 120.0f;
@@ -63,23 +94,14 @@ const float RPM_STEP =   1.0f;
 
 // ── Períodos de temporización ────────────────────────────────
 const unsigned long STATUS_INTERVAL_MS  = 1000UL;   // reporte serial
-const unsigned long CONTROL_INTERVAL_US = 10000UL;  // lazo PI = 10 ms
+const unsigned long CONTROL_INTERVAL_US = 10000UL;  // medición de velocidad = 10 ms
+// Mismo periodo en segundos, para los cálculos en coma flotante.
+// DEBE coincidir con CONTROL_INTERVAL_US.
+const float MEAS_TS = 0.01f;
 
 // ── Debounce encoder ─────────────────────────────────────────
 // A 120 RPM el intervalo mínimo entre flancos es ≈ 208 µs; 50 µs no descarta pulsos reales.
 static const uint16_t DEBOUNCE_US = 50;
-
-// ── Controlador PI de velocidad (diseño IMC) ─────────────────
-// Planta:  G(s) = 1 / (tau·s + 1),  tau = 0.0001463 s
-// Lambda (suavidad IMC): 0.125 s
-// C(s) = Kp + Ki/s,  con Kp = tau/lambda,  Ki = 1/lambda
-//
-// Discretización integral (Forward Euler, Ts = 10 ms):
-//   I[k] = I[k-1] + Ki·Ts·e[k]   ← solo si u[k] no está saturado
-//   u[k] = Kp·e[k] + I[k]
-const float PI_KP = 0.00117f;
-const float PI_KI = 8.0f;
-const float PI_TS = 0.01f;           // s
 
 // ── Medición de velocidad: media móvil adaptativa + IIR ──────
 // La ventana crece hacia atrás desde la muestra más reciente hasta
@@ -87,24 +109,23 @@ const float PI_TS = 0.01f;           // s
 // con un mínimo de VEL_WIN_MIN muestras.
 //   ≥ ~6 RPM → ventana de 80 ms (comportamiento clásico)
 //   a 1 RPM  → crece hasta 500 ms → cuantización ≤ 6 % (vs ±31 % con 80 ms)
-// Coste: hasta ~250 ms de retardo extra por debajo de ~6 RPM; el PI
-// (λ = 0.125 s) debe verificarse en banco a esas velocidades.
+// Coste: hasta ~250 ms de retardo extra por debajo de ~6 RPM. Al ser telemetría
+// (no realimentación), ese retardo no afecta al movimiento del motor.
 const uint8_t VEL_BUF_N      = 50;   // 500 ms de deltas de 10 ms
 const uint8_t VEL_WIN_MIN    = 8;    // ventana mínima = 80 ms
 const int32_t VEL_MIN_COUNTS = 16;   // crecer hasta |sum| ≥ 16 cuentas
-// Filtro IIR de primer orden sobre la velocidad cruda antes del PI.
-// α=0.3 → f_c ≈ 5.7 Hz, retardo ≈ 23 ms — amortigua ruido de cuadratura
-// sin afectar la respuesta en el ancho de banda del lazo (λ=0.125 s → ~1.3 Hz).
+// Filtro IIR de primer orden sobre la velocidad cruda.
+// α=0.3 → f_c ≈ 5.7 Hz, retardo ≈ 23 ms — amortigua el ruido de cuadratura
+// para que la cifra reportada sea legible.
 const float VEL_ALPHA = 0.3f;
 
 // ─────────────────────────────────────────────────────────────
 // Variables de estado del sistema
 // ─────────────────────────────────────────────────────────────
-float   targetRPM    = 1.0f;    // RPM objetivo (ambos modos)
-float   controlRPM   = 1.0f;    // RPM enviadas al driver (salida del PI o targetRPM)
-float   piIntegral   = 1.0f;    // acumulador integral
-float   measuredRPM  = 0.0f;    // velocidad medida (media móvil, actualizada cada 10 ms)
-bool    usePID       = false;   // false = lazo abierto, true = lazo cerrado
+// targetRPM es la velocidad del MOTOR: alimenta directamente la generación de
+// pasos, sin lazo de realimentación (ver la nota de cabecera).
+float   targetRPM    = 1.0f;    // RPM objetivo del motor
+float   measuredRPM  = 0.0f;    // velocidad del ENCODER medida (actualizada cada 10 ms)
 bool    motorEnabled = true;
 bool    dirForward   = true;
 
@@ -238,57 +259,17 @@ void updateVelocity() {
   // RPM cruda = cuentas_acum / cuentas_por_rev / ventana_s × 60 s/min
   // fabsf: la magnitud de velocidad es siempre positiva; el signo
   // se gestiona por separado con dirForward.
-  const float windowS = (float)n * PI_TS;
+  const float windowS = (float)n * MEAS_TS;
   const float rawRPM  = fabsf((float)sum) / (float)COUNTS_PER_REV / windowS * 60.0f;
-  // Filtro IIR: suaviza el ruido de cuadratura antes de alimentar el PI.
-  // measuredRPM se resetea a 0 en flushVelBuffer/encoderReset → el filtro
-  // arranca desde cero tras cambio de dirección o reinicio.
+  // Filtro IIR: suaviza el ruido de cuadratura para que la cifra reportada sea
+  // estable. measuredRPM se resetea a 0 en flushVelBuffer/encoderReset → el
+  // filtro arranca desde cero tras cambio de dirección o reinicio.
   measuredRPM = VEL_ALPHA * rawRPM + (1.0f - VEL_ALPHA) * measuredRPM;
 }
 
-// =============================================================
-// updateControl — un paso del lazo de control (solo con motor en marcha)
-//
-// Modo PI (usePID=true):
-//   e[k]    = targetRPM − measuredRPM
-//   u_raw   = Kp·e[k] + piIntegral
-//   u_sat   = saturar(u_raw, RPM_MIN, RPM_MAX)
-//   Anti-windup (clamping): integrar solo si u_raw no está saturado
-//   I[k]    = I[k-1] + Ki·Ts·e[k]  (con clamping)
-//   controlRPM = u_sat
-//
-// Modo libre (usePID=false):
-//   controlRPM = targetRPM
-//   piIntegral = targetRPM  ← precondiciona para transferencia sin choque
-// =============================================================
-void updateControl() {
-  if (!usePID) {
-    controlRPM = targetRPM;
-    piIntegral = targetRPM;   // precondicionar para transferencia sin choque
-    return;
-  }
-
-  const float e = targetRPM - measuredRPM;
-
-  // Salida proporcional + integral acumulado
-  const float uRaw = PI_KP * e + piIntegral;
-
-  // Saturar
-  const float uSat = (uRaw < RPM_MIN) ? RPM_MIN
-                   : (uRaw > RPM_MAX) ? RPM_MAX
-                   : uRaw;
-
-  // Anti-windup condicional mejorado:
-  // No integrar solo si la salida está saturada Y el error agrava esa saturación.
-  // Así se permite integrar incluso en saturación cuando e ayuda a salir de ella.
-  const bool windingHigh = (uRaw > RPM_MAX) && (e > 0.0f);
-  const bool windingLow  = (uRaw < RPM_MIN) && (e < 0.0f);
-  if (!windingHigh && !windingLow) {
-    piIntegral += PI_KI * PI_TS * e;
-  }
-
-  controlRPM = uSat;
-}
+// Nota: measuredRPM es la velocidad del ENCODER. Para compararla con la
+// consigna hay que dividirla por GEAR_RATIO (el encoder gira más rápido que el
+// motor); eso se hace al formatear el estado, en formatStatusLine().
 
 // =============================================================
 // buildStatus + drip-pump — reporte de estado NO bloqueante
@@ -301,8 +282,12 @@ void updateControl() {
 // El signo de los RPM medidos codifica la dirección: >0 FWD, <0 REV.
 // targetRPM es siempre la MAGNITUD porque la dirección se fija aparte.
 //
-// [LIBRE] : "[LIBRE]  Tgt:30.0RPM  Real:-28.5RPM  Ang:185.4deg  Dir:REV  CORRIENDO"
-// [PI]    : "[PI]  Tgt:30.0RPM  Meas:-28.5RPM  Err:1.5  Ctrl:-30.2RPM  Ang:185.4deg  Dir:REV  CORRIENDO"
+// Tres velocidades, todas en RPM:
+//   Tgt  → consigna del MOTOR (la que se convierte en tren de pasos)
+//   Mot  → motor MEDIDO = encoder / GEAR_RATIO  → comparable con Tgt
+//   Enc  → encoder medido en bruto (gira GEAR_RATIO veces más rápido)
+//
+// "Tgt:30.0RPM  Mot:-29.8RPM  Enc:-59.2RPM  Ang:185.4deg  Dir:REV  CORRIENDO"
 // =============================================================
 static char    statusBuf[112];   // línea PI ≈ 90 chars + margen
 static uint8_t statusLen      = 0;
@@ -333,30 +318,21 @@ static void formatStatusLine() {
   const float sign = dirForward ? 1.0f : -1.0f;
   // measuredRPM no está acotada por RPM_MAX (deriva del encoder); se
   // recorta a ±999.9 para garantizar que dtostrf quepa en el buffer.
-  const float measSafe = (measuredRPM > 999.9f) ? 999.9f : measuredRPM;
+  const float encSafe = (measuredRPM > 999.9f) ? 999.9f : measuredRPM;
+  const float motSafe = encSafe / GEAR_RATIO;
 
   // Peor caso "-999.9" = 6+1 chars. Ver fmtFloat (portable AVR/ARM).
-  char sTgt[10], sMeas[10], sErr[10], sCtrl[10], sAng[10];
-  fmtFloat(sTgt,  sizeof(sTgt),  targetRPM);
-  fmtFloat(sMeas, sizeof(sMeas), sign * measSafe);
-  fmtFloat(sAng,  sizeof(sAng),  angleDeg);
+  char sTgt[10], sMot[10], sEnc[10], sAng[10];
+  fmtFloat(sTgt, sizeof(sTgt), targetRPM);
+  fmtFloat(sMot, sizeof(sMot), sign * motSafe);
+  fmtFloat(sEnc, sizeof(sEnc), sign * encSafe);
+  fmtFloat(sAng, sizeof(sAng), angleDeg);
 
-  int len;
-  if (usePID) {
-    fmtFloat(sErr,  sizeof(sErr),  targetRPM - measSafe);
-    fmtFloat(sCtrl, sizeof(sCtrl), sign * controlRPM);
-    len = snprintf(statusBuf, sizeof(statusBuf),
-                   "[PI]  Tgt:%sRPM  Meas:%sRPM  Err:%s  Ctrl:%sRPM  Ang:%sdeg  Dir:%s  %s\r\n",
-                   sTgt, sMeas, sErr, sCtrl, sAng,
-                   dirForward ? "FWD" : "REV",
-                   motorEnabled ? "CORRIENDO" : "PARADO");
-  } else {
-    len = snprintf(statusBuf, sizeof(statusBuf),
-                   "[LIBRE]  Tgt:%sRPM  Real:%sRPM  Ang:%sdeg  Dir:%s  %s\r\n",
-                   sTgt, sMeas, sAng,
-                   dirForward ? "FWD" : "REV",
-                   motorEnabled ? "CORRIENDO" : "PARADO");
-  }
+  int len = snprintf(statusBuf, sizeof(statusBuf),
+                     "Tgt:%sRPM  Mot:%sRPM  Enc:%sRPM  Ang:%sdeg  Dir:%s  %s\r\n",
+                     sTgt, sMot, sEnc, sAng,
+                     dirForward ? "FWD" : "REV",
+                     motorEnabled ? "CORRIENDO" : "PARADO");
   if (len < 0) { statusLen = 0; statusPos = 0; return; }
   if (len > (int)(sizeof(statusBuf) - 1)) len = (int)(sizeof(statusBuf) - 1);
   statusLen = (uint8_t)len;
@@ -414,10 +390,8 @@ void startMotor() {
   if (motorEnabled) return;
   motorEnabled = true;
   digitalWrite(PIN_EN, LOW);
-  // Arranque suave: resetear medición e integrador
+  // Arranque limpio: descartar la medición anterior
   flushVelBuffer();
-  piIntegral = targetRPM;
-  controlRPM = targetRPM;
   const unsigned long now = micros();
   lastControlTime = now;
   lastStepTime    = now;   // evita ráfaga de pasos por deuda acumulada
@@ -433,29 +407,12 @@ void stopMotor() {
   stepPinHigh = false;
 }
 
-void setMode(bool pid) {
-  if (pid == usePID) return;
-  usePID = pid;
-  if (usePID) {
-    // Transferencia sin choque: el integrador arranca donde está
-    // la salida del lazo abierto → el motor no da salto al activar el PI.
-    piIntegral = controlRPM;
-    Serial.println(F("Modo PI ON  — lazo cerrado velocidad"));
-  } else {
-    // Al desactivar, dejar el integrador en targetRPM para la próxima activación.
-    piIntegral = targetRPM;
-    Serial.println(F("Modo PI OFF — lazo abierto"));
-  }
-  buildStatus();
-}
-
 void setDir(bool forward) {
   if (forward == dirForward) return;
   dirForward = forward;
   setDirection(dirForward);
   // Vaciar el buffer: evita mezclar cuentas de sentidos opuestos.
   flushVelBuffer();
-  if (usePID) piIntegral = targetRPM;   // re-iniciar integrador limpio
   buildStatus();
 }
 
@@ -480,8 +437,6 @@ void handleCommand(char cmd) {
       break;
     case 'f': setDir(true);   break;
     case 'b': setDir(false);  break;
-    case 'p': setMode(true);  break;
-    case 'l': setMode(false); break;
 
     // Legado (toggles, solo terminal manual)
     case 's':
@@ -489,7 +444,6 @@ void handleCommand(char cmd) {
       buildStatus();
       break;
     case 'r': setDir(!dirForward); break;
-    case 'c': setMode(!usePID);    break;
 
     case 'z':
       encoderReset();
@@ -531,9 +485,9 @@ void setup() {
   lastStatusTime  = millis();
   lastEncCtrl     = 0;
 
-  Serial.println(F("===  NEMA17 + TMC2208 + ENCODER + PI  ==="));
+  Serial.println(F("===  NEMA17 + TMC2208 + ENCODER (lazo abierto)  ==="));
   Serial.println(F("'v<rpm>\\n':RPM abs  '+'/'-':±1RPM  '1'/'0':marcha/paro  'e':E-STOP"));
-  Serial.println(F("'f'/'b':direccion  'p'/'l':modo  'z':zero  (legado: s r c)"));
+  Serial.println(F("'f'/'b':direccion  'z':zero  (legado: s r)"));
   buildStatus();
 }
 
@@ -572,10 +526,10 @@ void loop() {
     handleCommand(ch);
   }
 
-  // ── Medición de velocidad + lazo de control (cada 10 ms) ─
+  // ── Medición de velocidad (cada 10 ms) ──────────────────
   // updateVelocity() corre SIEMPRE: la telemetría de velocidad sigue
   // viva con el motor parado (decae a 0, refleja giro manual del eje).
-  // Solo la corrección de control se condiciona a motorEnabled.
+  // Es solo medición: no realimenta la generación de pasos.
   if ((now_us - lastControlTime) >= CONTROL_INTERVAL_US) {
     // Re-anclar si la deuda supera 2 intervalos (p.ej. tras un bloqueo):
     // evita ejecutar ráfagas de ticks con deltas que no son de 10 ms.
@@ -584,16 +538,16 @@ void loop() {
     }
     lastControlTime += CONTROL_INTERVAL_US;   // += evita deriva acumulada
     updateVelocity();
-    if (motorEnabled) updateControl();
   }
 
   // ── Generación de pasos no bloqueante ───────────────────
-  // El pin STEP alterna cada halfPeriod µs sin bloquear el loop.
-  // controlRPM ≥ RPM_MIN > 0, por lo que halfPeriodUs nunca falla.
+  // El pin STEP alterna cada halfPeriod µs sin bloquear el loop; la velocidad
+  // es la consigna directa (lazo abierto).
+  // targetRPM ≥ RPM_MIN > 0, por lo que halfPeriodUs nunca falla.
   if (motorEnabled) {
-    const unsigned long half = halfPeriodUs(controlRPM);
+    const unsigned long half = halfPeriodUs(targetRPM);
     // Anti-ráfaga: si la deuda acumulada supera 2 semiperíodos (puede ocurrir
-    // cuando controlRPM sube repentinamente y half encoge), re-anclar para
+    // cuando targetRPM sube repentinamente y half encoge), re-anclar para
     // evitar disparar múltiples pasos en la misma iteración del loop.
     if ((now_us - lastStepTime) > 2UL * half) {
       lastStepTime = now_us - half;

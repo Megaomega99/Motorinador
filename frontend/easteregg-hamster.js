@@ -61,7 +61,7 @@
       <div style="position:absolute;top:68px;left:24px;font-family:'IBM Plex Mono',monospace;
         font-size:8px;color:rgba(241,176,74,0.55);line-height:1.9;letter-spacing:0.04em;
         opacity:0;animation:hmIn 0.4s ease 1.3s both;">
-        SYS: HAMSTER-LABS v3.1<br>MODE: WHEEL-RUN<br>CH: NEMA17-L/R<br>LOOP: CLOSED
+        SYS: HAMSTER-LABS v3.1<br>MODE: WHEEL-RUN<br>CH: NEMA17-L/R<br>LOOP: OPEN
       </div>
       <div style="position:absolute;top:68px;right:24px;text-align:right;font-family:'IBM Plex Mono',monospace;
         font-size:8px;color:rgba(241,176,74,0.55);line-height:1.9;letter-spacing:0.04em;

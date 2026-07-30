@@ -22,6 +22,7 @@ import pandas as pd
 from .base import Chunk, Meta, Reader
 
 _ELECTRODE_RE = re.compile(r"(A-\d+)")
+_ANALOG_RE = re.compile(r"(ANALOG-IN-\d+)")
 
 
 def toggles_to_levels(pulses: np.ndarray, parity0: int) -> tuple[np.ndarray, int]:
@@ -110,6 +111,8 @@ class TxtReader(Reader):
         self._time_col: int | None = None
         self._a_col: int | None = None
         self._b_col: int | None = None
+        self._motor_col: int | None = None
+        self._motor_name: str | None = None
         self._electrode_cols: dict[str, int] = {}
 
         for i, label in enumerate(self._labels):
@@ -120,6 +123,10 @@ class TxtReader(Reader):
                 self._a_col = i
             elif "DIGITAL-IN-02" in label:
                 self._b_col = i
+            elif (m := _ANALOG_RE.search(label)) is not None:
+                # Espejo del pulso STEP (velocidad del motor); ver analysis/motor.py.
+                self._motor_col = i
+                self._motor_name = m.group(1)
             elif unit == "uV":
                 m = _ELECTRODE_RE.search(label)
                 if m:
@@ -162,6 +169,7 @@ class TxtReader(Reader):
             electrode_names=sorted(self._electrode_cols),
             digital_names=["DIGITAL-IN-01", "DIGITAL-IN-02"],
             fmt="txt",
+            motor_channel=self._motor_name,
         )
 
     def metadata(self) -> Meta:
@@ -179,6 +187,8 @@ class TxtReader(Reader):
                 raise ValueError(f"Electrodo desconocido: {name}")
 
         usecols = [self._time_col, self._a_col, self._b_col]
+        if self._motor_col is not None:
+            usecols.append(self._motor_col)
         usecols += [self._electrode_cols[n] for n in elec]
 
         # pandas asigna `names` a las columnas en ORDEN DE ARCHIVO (no en el
@@ -210,4 +220,8 @@ class TxtReader(Reader):
                 n: frame[str(self._electrode_cols[n])].to_numpy(dtype=np.float64)
                 for n in elec
             }
-            yield Chunk(t=t, a=a, b=b, electrodes=elec_data)
+            motor = (
+                frame[str(self._motor_col)].to_numpy(dtype=np.float64)
+                if self._motor_col is not None else None
+            )
+            yield Chunk(t=t, a=a, b=b, electrodes=elec_data, motor=motor)

@@ -1,12 +1,18 @@
-# Análisis de encoder y electrodos (GUI TkInter)
+# Análisis de encoder, motor y electrodos (GUI TkInter)
 
-Herramienta de escritorio para inspeccionar **offline** las grabaciones de banco:
-reconstruye el **ángulo** y la **velocidad angular** del motor a partir de las dos
-señales digitales de cuadratura del encoder (grabadas junto a los electrodos) y
-permite revisarlas junto a la actividad de los electrodos, sin saturar la RAM.
+Herramienta de escritorio para inspeccionar **offline** las grabaciones de banco.
+Reconstruye, sin cargar la sesión entera en RAM:
 
-Reutiliza la geometría del encoder del firmware ([../src/main.cpp](../src/main.cpp)):
-`ENC_PPR = 600`, decodificación X4 → `COUNTS_PER_REV = 2400`.
+- el **ángulo** y la **velocidad angular** del encoder, desde las dos señales
+  digitales de cuadratura, y
+- la **velocidad comandada del motor**, desde el espejo del pulso STEP grabado en
+  la entrada analógica `ANALOG-IN-2`,
+
+y las compara para medir la **relación de engranajes** y delatar **pasos
+perdidos**. Todo junto a la actividad de los electrodos, en el mismo eje de tiempo.
+
+Reutiliza la geometría del firmware ([../src/main.cpp](../src/main.cpp)):
+`ENC_PPR = 600` → `COUNTS_PER_REV = 2400` (X4) y `STEPS_PER_REV = 1600`.
 
 ## Instalación
 
@@ -22,24 +28,68 @@ pip install -r analysis/requirements.txt
 python -m analysis.app
 ```
 
-1. **Abrir archivo** `.txt` (export tabular de Intan) o `.rhs` (binario Intan).
+1. **Abrir archivo** `.txt` (export tabular de Intan) o `.rhs` (binario Intan), o
+   **Abrir carpeta de sesión** para tratar los varios `.rhs` de una toma como una
+   **única grabación continua** — Intan parte las sesiones largas en archivos de
+   un minuto (la toma de referencia son 8 archivos = 7.3 min).
    Se procesa por segmentos a un caché HDF5 temporal (barra de progreso).
-2. **Elegir unidades**: ángulo (rad / grados), velocidad (rad/s, grad/s, RPM) y
-   la ventana de suavizado de la velocidad (ms).
-3. **Seleccionar ≥ 3 electrodos** (Ctrl/Shift en la lista).
-4. **Navegar** por segmentos (longitud de ventana + deslizador + ◀/▶). Las tres
-   gráficas (electrodos, ángulo, velocidad) comparten el eje de tiempo.
-5. **Estadísticos**: velocidad media de la sesión, tabla de la sesión y tabla de
-   la ventana visible (se actualiza al navegar).
-6. **Exportar** con columnas de ángulo y velocidad añadidas a CSV/TXT o HDF5.
+2. **Navegar con la tira de vista general** (arriba): muestra toda la sesión y la
+   ventana visible sombreada; un clic salta a ese instante. En una sesión con
+   arranques y paradas es la forma rápida de encontrar los tramos en marcha.
+3. **Elegir unidades**: ángulo (rad / grados), velocidad (rad/s, grad/s, RPM) y
+   las dos ventanas de suavizado (ver abajo).
+4. **Relación de engranajes**: se **mide sobre los propios datos** al cargar y se
+   adopta como valor de trabajo; el botón *Medir en los datos* la recalcula y
+   `Vueltas enc/motor` permite fijarla a mano.
+5. **Seleccionar electrodos** (Ctrl/Shift en la lista).
+6. **Navegar** por segmentos (longitud de ventana + deslizador + ◀/▶). Las cuatro
+   gráficas comparten el eje de tiempo.
+7. **Estadísticos**: velocidad de la sesión y de la ventana, resumen del motor
+   (consigna → medido y deslizamiento) y tabla de la transmisión medida.
+8. **Exportar** a CSV/TXT o HDF5 con las columnas derivadas añadidas.
+
+### Las dos ventanas de suavizado
+
+| Control | Por defecto | Para qué |
+|---|---|---|
+| `Ventana vel. (ms)` | 50 ms | Velocidad del encoder (gráfica 3 y estadísticos). |
+| `Ventana motor (ms)` | 500 ms | Comparación con la consigna (gráfica 4, resumen y columna `slip`). |
+
+Son distintas por una razón física: **el tren de engranajes resuena**. A 5 RPM de
+consigna la velocidad del encoder oscila ±20 RPM alrededor de su media a ~10 Hz
+(stick-slip / juego entre dientes). Con 50 ms esa oscilación es real pero tapa por
+completo la curva de la consigna; con 500 ms se promedia sin ocultar un atasco,
+que dura segundos.
+
+## Las cuatro gráficas
+
+1. **Electrodos** elegidos (µV).
+2. **Ángulo** del encoder (acumulado u envuelto).
+3. **Velocidad del encoder**.
+4. **Motor**: consigna (del espejo STEP) frente a medida referida al eje del motor
+   (encoder ÷ relación). *El hueco entre las dos curvas es el deslizamiento*: si el
+   motor pierde pasos o se atasca, la medida cae por debajo de la consigna.
 
 ## Formatos de entrada
 
 | Formato | Soporte | Notas |
 |---------|---------|-------|
-| `.txt`  | ✅ | Export tabular de Intan. Las columnas `DIGITAL-IN` son **pulsos de flanco**; el lector reconstruye el nivel por paridad (ver abajo). |
 | `.rhs`  | ✅ | Binario Intan monolítico, leído con `neo.rawio.IntanRawIO` (memmap, RAM plana). |
-| `.smrx` / `.s2rx` | ❌ | Spike2. `sonpy` no tiene wheel para Python 3.13 en Linux. Convertir a `.txt`/`.rhs` si hace falta. |
+| carpeta de `.rhs` | ✅ | Todos los archivos en orden temporal como una sola grabación. |
+| `.txt`  | ✅ | Export tabular de Intan. Las columnas `DIGITAL-IN` son **pulsos de flanco**; el lector reconstruye el nivel por paridad (ver abajo). |
+| `.smrx` / `.s2rx` | ❌ | Spike2. `sonpy` no tiene wheel para Python 3.13 en Linux. Convertir a `.txt`/`.rhs`. |
+
+La señal del motor es **opcional**: las grabaciones anteriores a
+`intento serio 2_260729_142804` no la traen. En ese caso la cuarta gráfica lo dice,
+la relación no se puede medir y el export omite las columnas del motor.
+
+### Canales que se leen del `.rhs`
+
+| Stream | Canal | Uso |
+|---|---|---|
+| `RHS2000 amplifier channel` | `A-0xx` (µV) | electrodos |
+| `USB board digital input channel` | `DIGITAL-IN-01/02` | encoder A/B |
+| `USB board ADC input channel` | `ANALOG-IN-2` (V) | espejo STEP → velocidad del motor |
 
 ### Detalle importante: codificación de las señales digitales en `.txt`
 
@@ -49,26 +99,60 @@ acumulada (`nivel[i] = Σ pulsos[0..i] mod 2`). El `.rhs` sí da niveles directo
 Verificado: ambas vías dan el **mismo** conteo del encoder (X4). El lector `.txt`
 normaliza esto por defecto (`digital_mode="toggle"`).
 
+## Columnas del export
+
+Siempre: `Time`, `DIGITAL-IN-01/02`, los electrodos (µV), `angle_<unidad>`,
+`omega_<unidad>`.
+
+Si la grabación trae el espejo STEP, además:
+
+| Columna | Unidad | Qué es |
+|---|---|---|
+| `analog_in_2_V` | V | la onda cuadrada cruda del espejo STEP |
+| `step_count` | pasos | micropasos acumulados |
+| `motor_rpm` | RPM | velocidad **comandada** del motor (exacta) |
+| `slip` | frac. [0,1] | deslizamiento: 0 sigue la consigna, 1 eje bloqueado |
+
+En HDF5 se guarda también `gear_ratio` como atributo.
+
 ## Diseño (RAM plana)
 
-Una única pasada por segmentos vuelca conteo del encoder + electrodos a un HDF5
-chunked. Después, `SessionCache` sirve tramos (ventana visible), la vista general
-decimada (envolvente min/max) y los estadísticos leyendo del HDF5. El conteo del
-encoder (~8 MB/millón de muestras) se mantiene en RAM; ángulo y velocidad se
-derivan de él al vuelo. Los 32 electrodos nunca se cargan enteros a la vez.
+Una única pasada por segmentos vuelca a un HDF5 chunked: conteo del encoder,
+conteo de micropasos, tensión del espejo STEP y electrodos. Después,
+`SessionCache` sirve tramos (ventana visible), la vista general decimada
+(envolvente min/max) y los estadísticos leyendo del HDF5. Los dos conteos
+(~8 MB/millón de muestras cada uno) se mantienen en RAM porque son baratos y de
+ellos derivan ángulo, velocidad, velocidad de motor y deslizamiento al vuelo. Los
+electrodos nunca se cargan enteros a la vez.
+
+Coste medido en la toma de referencia (8 archivos, 1.3 GB, 13.1 M muestras,
+21 electrodos): **caché de 1.4 GB construida en ~2 s** (NVMe + memmap).
 
 ## Módulos
 
 | Archivo | Responsabilidad |
 |---------|-----------------|
-| `units.py` | Unidades y conversiones (cuentas ↔ ángulo ↔ velocidad). |
+| `units.py` | Unidades y geometría (encoder 2400, motor 1600, relación por defecto). |
 | `encoder.py` | Decodificación X4 vectorizada (stateful) + ángulo + velocidad. |
-| `readers/` | `base` (Protocol), `txt_reader`, `rhs_reader`, `factory`. |
+| `motor.py` | Espejo STEP → conteo de micropasos (stateful) → RPM del motor. |
+| `gearing.py` | Estimación de la relación de engranajes y deslizamiento. |
+| `readers/` | `base` (Protocol), `txt_reader`, `rhs_reader`, `session`, `factory`. |
 | `processing.py` | Construcción del caché HDF5 + `SessionCache` + decimación. |
-| `stats.py` | Estadísticos de velocidad (sesión y ventana). |
+| `stats.py` | Estadísticos de velocidad y resumen del motor. |
 | `exporter.py` | Exportación por segmentos a CSV/TXT/HDF5 con columnas nuevas. |
-| `ui/` | `controls`, `plot_panel`, `stats_panel`, `main_window`. |
+| `ui/` | `controls`, `overview_strip`, `plot_panel`, `stats_panel`, `main_window`. |
 | `app.py` | Punto de entrada. |
+
+## Resultados sobre la toma de referencia
+
+`intento serio 2_260729_142804` (8 × `.rhs`, 30 kHz, 437 s, 21 electrodos):
+
+- Relación medida: **1.9861** enc/motor (mediana por ventana 1.9822) sobre 141
+  ventanas de consigna estable. El nominal supuesto era 2.1 → **6 % alto**.
+- Pérdida de paso en **12 de 141** ventanas (**8.5 %**), con un bloqueo casi total
+  hacia t ≈ 180–183 s (el ángulo se queda plano mientras siguen llegando pasos).
+- Consignas recuperadas del espejo STEP: 3.02, 4.02, 5.00, 5.02, 6.99 RPM — valores
+  limpios, como los fija el firmware.
 
 ## Tests
 
@@ -76,6 +160,6 @@ derivan de él al vuelo. Los 32 electrodos nunca se cargan enteros a la vez.
 pytest analysis/tests/ --cov=analysis
 ```
 
-Incluye una validación cruzada sobre los datos reales de `intento_260724_104300`
-(se salta si no están presentes) que comprueba que el ángulo del `.txt` y el del
-`.rhs` coinciden. Los tests de GUI se saltan si no hay `DISPLAY`.
+115 tests, cobertura ~89 %. Los de GUI se saltan si no hay `DISPLAY`. Incluye una
+validación cruzada sobre `intento_260724_104300` (se salta si no está) que
+comprueba que el ángulo del `.txt` y el del `.rhs` coinciden.

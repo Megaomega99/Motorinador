@@ -1,4 +1,4 @@
-"""Panel de controles: archivo, unidades, ventana de suavizado, electrodos y navegación."""
+"""Panel de controles: archivo, unidades, engranajes, electrodos y navegación."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from tkinter import ttk
 from typing import Callable
 
-from ..units import AngleUnit, VelocityUnit
+from ..units import GEAR_RATIO_DEFAULT, AngleUnit, VelocityUnit
 
 
 @dataclass
@@ -16,6 +16,8 @@ class ControlCallbacks:
     on_settings_changed: Callable[[], None]
     on_navigate: Callable[[], None]
     on_export: Callable[[], None]
+    on_open_session: Callable[[], None]
+    on_estimate_ratio: Callable[[], None]
 
 
 class ControlsPanel(tk.Frame):
@@ -24,6 +26,7 @@ class ControlsPanel(tk.Frame):
         self._cb = callbacks
         self._build_file()
         self._build_units()
+        self._build_gearing()
         self._build_electrodes()
         self._build_navigation()
         self._build_export()
@@ -32,10 +35,17 @@ class ControlsPanel(tk.Frame):
 
     # ── secciones ────────────────────────────────────────────────
     def _build_file(self) -> None:
-        # El botón de abrir SIEMPRE está habilitado (no depende de datos cargados).
+        # Los botones de abrir SIEMPRE están habilitados (no dependen de datos).
         self._open_btn = tk.Button(self, text="Abrir archivo (.txt / .rhs)...",
                                    command=self._cb.on_open)
         self._open_btn.pack(fill=tk.X)
+        # Intan parte las tomas largas en archivos de un minuto: esto abre los 8
+        # de una sesión como una sola grabación continua.
+        self._open_session_btn = tk.Button(
+            self, text="Abrir carpeta de sesión (varios .rhs)...",
+            command=self._cb.on_open_session,
+        )
+        self._open_session_btn.pack(fill=tk.X, pady=(3, 0))
         self._file_lbl = tk.Label(self, text="Sin archivo", fg="#666", anchor="w", wraplength=240)
         self._file_lbl.pack(fill=tk.X, pady=(2, 8))
 
@@ -43,6 +53,7 @@ class ControlsPanel(tk.Frame):
         self.angle_unit = tk.StringVar(value=AngleUnit.DEG.value)
         self.vel_unit = tk.StringVar(value=VelocityUnit.RPM.value)
         self.window_ms = tk.StringVar(value="50")
+        self.motor_window_ms = tk.StringVar(value="500")
         self.wrap = tk.BooleanVar(value=False)
 
         frm = ttk.LabelFrame(self, text="Unidades y cálculo")
@@ -66,15 +77,50 @@ class ControlsPanel(tk.Frame):
             command=self._cb.on_settings_changed,
         ).grid(row=2, column=1, sticky="ew", padx=4)
 
+        # Ventana propia para la comparación con el motor. El tren de engranajes
+        # resuena: a 5 RPM la velocidad del encoder oscila ±20 RPM a ~10 Hz, así
+        # que con 50 ms la curva medida es ilegible frente a la consigna. Media
+        # segundo promedia ese rizado sin ocultar un atasco (que dura segundos).
+        ttk.Label(frm, text="Ventana motor (ms):").grid(row=3, column=0, sticky="w",
+                                                        padx=4, pady=2)
+        ttk.Spinbox(
+            frm, from_=10, to=5000, increment=50, textvariable=self.motor_window_ms,
+            width=10, command=self._cb.on_settings_changed,
+        ).grid(row=3, column=1, sticky="ew", padx=4)
+
         ttk.Checkbutton(
             frm, text="Envolver ángulo [0, vuelta)", variable=self.wrap,
             command=self._cb.on_settings_changed,
-        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=4, pady=2)
+        ).grid(row=4, column=0, columnspan=2, sticky="w", padx=4, pady=2)
 
         frm.columnconfigure(1, weight=1)
         for var in (self.angle_unit, self.vel_unit):
             var.trace_add("write", lambda *_: self._cb.on_settings_changed())
         self.window_ms.trace_add("write", lambda *_: self._cb.on_settings_changed())
+        self.motor_window_ms.trace_add("write", lambda *_: self._cb.on_settings_changed())
+
+    def _build_gearing(self) -> None:
+        """Relación de engranajes: motor ↔ encoder."""
+        self.gear_ratio = tk.StringVar(value=f"{GEAR_RATIO_DEFAULT:g}")
+
+        frm = ttk.LabelFrame(self, text="Transmisión motor → encoder")
+        frm.pack(fill=tk.X, pady=4)
+
+        ttk.Label(frm, text="Vueltas enc/motor:").grid(row=0, column=0, sticky="w",
+                                                       padx=4, pady=2)
+        ttk.Spinbox(
+            frm, from_=0.1, to=50.0, increment=0.01, textvariable=self.gear_ratio,
+            width=8, command=self._cb.on_settings_changed,
+        ).grid(row=0, column=1, sticky="ew", padx=4)
+        self.gear_ratio.trace_add("write", lambda *_: self._cb.on_settings_changed())
+
+        self._estimate_btn = tk.Button(frm, text="Medir en los datos",
+                                       command=self._cb.on_estimate_ratio)
+        self._estimate_btn.grid(row=1, column=0, columnspan=2, sticky="ew", padx=4, pady=(2, 4))
+        self._ratio_lbl = tk.Label(frm, text="—", fg="#444", anchor="w", wraplength=230,
+                                   justify="left")
+        self._ratio_lbl.grid(row=2, column=0, columnspan=2, sticky="ew", padx=4, pady=(0, 4))
+        frm.columnconfigure(1, weight=1)
 
     def _build_electrodes(self) -> None:
         frm = ttk.LabelFrame(self, text="Electrodos (elige 3 o mas, Ctrl/Shift)")
@@ -154,16 +200,21 @@ class ControlsPanel(tk.Frame):
                 pass
 
     def _iter_interactive(self):
+        never_disabled = (self._open_btn, self._open_session_btn)
         for child in self.winfo_children():
             for w in (child, *child.winfo_children()):
-                if w is self._open_btn:
-                    continue  # el botón de abrir nunca se deshabilita
+                if w in never_disabled:
+                    continue  # abrir archivo/sesión nunca se deshabilita
                 if isinstance(w, (ttk.Combobox, ttk.Spinbox, ttk.Scale, tk.Listbox, tk.Button,
                                   ttk.Checkbutton)):
                     yield w
 
     def set_file_label(self, text: str) -> None:
         self._file_lbl.config(text=text)
+
+    def set_ratio_info(self, text: str) -> None:
+        """Texto informativo bajo el control de la relación de engranajes."""
+        self._ratio_lbl.config(text=text)
 
     def set_progress(self, frac: float) -> None:
         self._progress["value"] = max(0.0, min(1.0, frac))
@@ -196,8 +247,20 @@ class ControlsPanel(tk.Frame):
     def get_window_ms(self) -> float:
         return _to_float(self.window_ms.get(), 50.0)
 
+    def get_motor_window_ms(self) -> float:
+        """Suavizado de la velocidad medida al compararla con la consigna del motor."""
+        return max(1.0, _to_float(self.motor_window_ms.get(), 500.0))
+
     def get_wrap(self) -> bool:
         return bool(self.wrap.get())
+
+    def get_gear_ratio(self) -> float:
+        """Relación de engranajes; un valor no válido cae al medido por defecto."""
+        value = _to_float(self.gear_ratio.get(), GEAR_RATIO_DEFAULT)
+        return value if value > 0 else GEAR_RATIO_DEFAULT
+
+    def set_gear_ratio(self, value: float) -> None:
+        self.gear_ratio.set(f"{value:.4g}")
 
     def get_selected_electrodes(self) -> list[str]:
         return [self._listbox.get(i) for i in self._listbox.curselection()]

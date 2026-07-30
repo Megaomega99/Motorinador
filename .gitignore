@@ -25,3 +25,14 @@ node_modules/
 
 # OS
 .DS_Store
+
+# Ruff / mypy
+.ruff_cache/
+.mypy_cache/
+
+# Grabaciones de banco (Intan). Una sola toma son ~1.3 GB: nunca al repo.
+# Los tests que las usan se saltan solos si no están presentes.
+*.rhs
+*.rhd
+textform.txt
+intento*/
