@@ -395,6 +395,164 @@
     display: flex; align-items: center; gap: 8px;
   }
   .group-title::after { content: ""; flex: 1; height: 1px; background: var(--line-soft); }
+
+  /* ════════════ Pestañas de vista ════════════ */
+  .viewtabs {
+    display: flex; gap: 6px; padding: 0 40px; margin: 4px 0 0;
+    position: relative; z-index: 5;
+  }
+  .viewtabs button {
+    appearance: none; border: 1px solid var(--line); border-bottom: none;
+    background: #f2e6cf; color: var(--ink-soft);
+    padding: 9px 22px; border-radius: 12px 12px 0 0; cursor: pointer;
+    font: 600 12px "IBM Plex Mono", monospace;
+    letter-spacing: .12em; text-transform: uppercase;
+    transition: background .15s, color .15s;
+  }
+  .viewtabs button:hover { background: #f8eeda; }
+  .viewtabs button.on {
+    background: var(--paper); color: var(--ink);
+    box-shadow: 0 -2px 8px -4px rgba(80,50,15,.3);
+  }
+
+  /* ════════════ Vista de análisis ════════════ */
+  main.analysis {
+    grid-template-columns: 320px 1fr 300px;
+  }
+  /* Los tres paneles comparten el alto de la ventana y hacen scroll por dentro:
+     así el selector de electrodos (al final del panel izquierdo) siempre es
+     alcanzable y la página no crece por debajo de las gráficas. */
+  main.analysis .panel {
+    height: calc(100vh - 168px);
+    min-height: 560px;
+    overflow-y: auto;
+    padding: 16px 18px;
+    position: sticky; top: 10px;
+  }
+  main.analysis .field { margin-bottom: 10px; }
+  .an-status {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    color: var(--ink-soft); margin: 6px 0; min-height: 15px; line-height: 1.4;
+  }
+  .an-status.ok  { color: var(--leaf); }
+  .an-status.err { color: var(--red); }
+
+  /* Navegador de archivos */
+  .an-cwd {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px;
+    color: var(--ink-soft); word-break: break-all; margin-bottom: 6px;
+    background: #fdf6e6; border: 1px solid var(--line-soft);
+    border-radius: 8px; padding: 6px 8px;
+  }
+  .an-filelist {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: #fdf6e6; max-height: 190px; overflow-y: auto;
+  }
+  #anBrowser.busy { opacity: .5; pointer-events: none; }
+  .an-row {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+    padding: 7px 10px; cursor: pointer;
+    border-bottom: 1px solid var(--line-soft);
+    font-family: "IBM Plex Mono", monospace; font-size: 11px;
+  }
+  .an-row:last-child { border-bottom: none; }
+  .an-row:hover { background: #f7ead0; }
+  .an-row-name { color: var(--ink); overflow-wrap: anywhere; }
+  .an-row-sub  { color: var(--ink-soft); font-size: 9.5px; white-space: nowrap; opacity: .8; }
+  .an-row.dir     .an-row-name { color: var(--wood-dark); font-weight: 600; }
+  .an-row.session .an-row-name { color: var(--orange); font-weight: 700; }
+  .an-row.session { background: #fdf0e0; }
+  .an-row.muted   { color: var(--ink-soft); cursor: default; opacity: .6; }
+  .an-row.muted:hover { background: transparent; }
+
+  .an-note {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px;
+    color: var(--ink-soft); line-height: 1.5; margin-top: 4px;
+  }
+  .an-note.warn { color: var(--red); }
+
+  /* Metadatos */
+  .an-meta {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    color: var(--ink-soft); line-height: 1.9;
+  }
+  .an-meta div { display: flex; justify-content: space-between; gap: 10px; }
+  .an-meta b { color: var(--ink); font-weight: 600; text-align: right;
+               overflow-wrap: anywhere; }
+  .an-meta b.ok   { color: var(--leaf); }
+  .an-meta b.warn { color: var(--orange); }
+
+  /* Zona de gráficas — ocupa el alto de la ventana y reparte el sobrante
+     entre los paneles, en lugar de alturas fijas que dejaban hueco abajo. */
+  .an-plots {
+    background: var(--paper); border: 1px solid var(--line);
+    border-radius: 18px; box-shadow: var(--shadow); padding: 14px;
+    display: flex; flex-direction: column; gap: 2px;
+    height: calc(100vh - 168px);   /* cabecera + pestañas + margen inferior */
+    min-height: 560px;
+    /* Se queda a la vista al desplazar los paneles laterales, que son más altos. */
+    position: sticky; top: 10px;
+  }
+  .an-plots.pending { opacity: .45; }
+  #anWorkspace:not(.ready) .an-plots-inner { display: none; }
+  #anWorkspace:not(.ready) .an-placeholder { display: block; }
+  #anWorkspace.ready .an-placeholder { display: none; }
+  .an-placeholder {
+    text-align: center; padding: 60px 20px; color: var(--ink-soft);
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; line-height: 1.8;
+  }
+  .an-plots-inner {
+    flex: 1; min-height: 0;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  /* Cada gráfica va en una celda que crece con flex; el canvas se ancla a la
+     celda en absoluto para que su tamaño no dependa del cálculo intrínseco de
+     un elemento reemplazado dentro de un contenedor flex. */
+  .an-cell { position: relative; min-height: 0; }
+  .an-cell > canvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%; display: block;
+  }
+  .an-cell-strip  { flex: 0 0 76px; }   /* la tira no necesita crecer */
+  .an-cell-elec   { flex: 2 1 0; }      /* los electrodos, el doble */
+  .an-cell-panel  { flex: 1.3 1 0; }
+
+  .an-toolbar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+  .an-toolbar .spacer { flex: 1; }
+  .an-cursor {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    color: var(--orange); min-height: 14px; margin-top: 2px;
+  }
+  .an-range {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    color: var(--ink-soft);
+  }
+  .an-hint {
+    font-family: "IBM Plex Mono", monospace; font-size: 9.5px;
+    color: var(--ink-soft); opacity: .75; margin-top: 4px;
+  }
+
+  /* Resumen del motor */
+  .an-summary {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px;
+    padding: 9px 11px; border-radius: 10px; margin-top: 4px;
+    background: var(--pid-light); border: 1px solid #a8c8e8; color: var(--ink);
+  }
+  .an-summary.bad   { background: #fdeee9; border-color: rgba(217,43,31,.45); color: var(--red-deep); }
+  .an-summary.muted { background: #f2ece0; border-color: var(--line); color: var(--ink-soft); }
+
+  /* Estadísticos */
+  .an-stats {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    color: var(--ink-soft); line-height: 1.95;
+  }
+  .an-stats div { display: flex; justify-content: space-between; gap: 10px; }
+  .an-stats b { color: var(--ink); font-weight: 600; }
+
+  .an-progress { width: 100%; height: 6px; margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -427,6 +585,12 @@
   </div>
 </header>
 
+<nav class="viewtabs" id="viewTabs">
+  <button data-view="control" class="on">🐹 Control</button>
+  <button data-view="analysis">📈 Análisis de grabaciones</button>
+</nav>
+
+<div id="viewControl">
 <main>
   <!-- ───────── LEFT: parameters ───────── -->
   <section class="panel left">
@@ -655,8 +819,164 @@
     <div>v6.0 · lazo abierto + engranajes · 2026-07</div>
   </div>
 </main>
+</div><!-- /viewControl -->
+
+<div id="viewAnalysis" style="display:none">
+<main class="analysis">
+
+  <!-- ───────── IZQUIERDA: archivo + ajustes ───────── -->
+  <section class="panel left">
+    <h2>Grabación</h2>
+    <div class="sub">Abrir · Unidades · Transmisión</div>
+
+    <div id="anBrowser">
+      <div class="an-cwd" id="anCwd">—</div>
+      <div class="an-filelist" id="anFileList"></div>
+      <div class="pillrow">
+        <button class="pill" id="anRefreshBrowse">↻ Recargar</button>
+        <button class="pill" id="anCloseSession">✕ Cerrar sesión</button>
+      </div>
+      <div class="an-note" id="anRootInfo"></div>
+    </div>
+
+    <div class="an-status" id="anStatus">Elige una grabación o una carpeta de sesión.</div>
+    <progress class="an-progress" id="anProgress" value="0" max="1"></progress>
+
+    <div class="divider"></div>
+    <div class="group-title">Unidades y cálculo</div>
+    <div class="row2">
+      <div class="field">
+        <label>Ángulo</label>
+        <select id="anAngleUnit">
+          <option value="grados" selected>grados</option>
+          <option value="rad">rad</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Velocidad</label>
+        <select id="anVelUnit">
+          <option value="RPM" selected>RPM</option>
+          <option value="rad/s">rad/s</option>
+          <option value="grad/s">grad/s</option>
+        </select>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Vent. encoder <span class="unit">ms</span></label>
+        <input id="anWindowMs" type="number" min="1" max="5000" step="5" value="50">
+      </div>
+      <div class="field">
+        <label>Vent. motor <span class="unit">ms</span></label>
+        <input id="anMotorWindowMs" type="number" min="10" max="10000" step="50" value="500">
+      </div>
+    </div>
+    <div class="an-note">
+      La del motor es mayor a propósito: los engranajes resuenan (±20 RPM a ~10 Hz).
+    </div>
+    <div class="field" style="margin-top:10px">
+      <label><input type="checkbox" id="anWrap"> Envolver ángulo [0, vuelta)</label>
+    </div>
+
+    <div class="divider"></div>
+    <div class="group-title">Transmisión motor → encoder</div>
+    <div class="field">
+      <label>Vueltas enc/motor <span class="unit">medida de los datos</span></label>
+      <input id="anGearRatio" type="number" min="0.1" max="50" step="0.001" value="1.986">
+    </div>
+    <div class="an-note" id="anGearInfo">—</div>
+
+    <div class="divider"></div>
+    <div class="group-title">Electrodos</div>
+    <select id="anElectrodes" multiple size="8" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:11px"></select>
+    <div class="an-note">Ctrl/Shift para elegir varios.</div>
+  </section>
+
+  <!-- ───────── CENTRO: gráficas ───────── -->
+  <section class="an-plots" id="anWorkspace">
+    <div class="an-placeholder">
+      Abre una grabación <b>.rhs</b> o una <b>carpeta de sesión</b> para empezar.<br>
+      <span style="opacity:.7">Intan parte las tomas largas en archivos de un minuto;
+      abrir la carpeta los une en una sola grabación continua.</span>
+    </div>
+
+    <div class="an-plots-inner">
+      <div class="an-toolbar">
+        <button class="pill" id="anZoomAll">⤢ Toda la sesión</button>
+        <button class="pill" id="anWin20">20 s</button>
+        <button class="pill" id="anWin5">5 s</button>
+        <button class="pill" id="anWin1">1 s</button>
+        <span class="spacer"></span>
+        <span class="an-range" id="anRangeInfo"></span>
+      </div>
+
+      <div class="an-cell an-cell-strip"><canvas id="anCanvasStrip"></canvas></div>
+      <div class="an-hint">
+        Vista general de la sesión — clic o arrastre para saltar. En las gráficas:
+        arrastra para desplazar, rueda para zoom, doble clic para ver todo.
+      </div>
+
+      <div class="an-cell an-cell-elec"><canvas id="anCanvas_elec"></canvas></div>
+      <div class="an-cell an-cell-panel"><canvas id="anCanvas_angle"></canvas></div>
+      <div class="an-cell an-cell-panel"><canvas id="anCanvas_vel"></canvas></div>
+      <div class="an-cell an-cell-panel"><canvas id="anCanvas_motor"></canvas></div>
+      <div class="an-cursor" id="anCursor"></div>
+    </div>
+  </section>
+
+  <!-- ───────── DERECHA: motor + estadísticos + export ───────── -->
+  <section class="panel right">
+    <h2>Resultados</h2>
+    <div class="sub">Motor · Estadísticos · Export</div>
+
+    <div class="group-title">Seguimiento del motor</div>
+    <div class="an-summary muted" id="anMotorSummary">—</div>
+    <div class="an-note">
+      Consigna → medido (encoder ÷ relación). El hueco entre las dos curvas
+      <b>es</b> el deslizamiento: si sube, el motor pierde pasos.
+    </div>
+
+    <div class="divider"></div>
+    <div class="group-title">Ventana visible</div>
+    <div class="an-stats" id="anStats"></div>
+
+    <div class="divider"></div>
+    <div class="group-title">Sesión</div>
+    <div class="an-meta">
+      <div><span>Archivo</span><b id="anMetaPath">—</b></div>
+      <div><span>Muestras</span><b id="anMetaSamples">—</b></div>
+      <div><span>Duración</span><b id="anMetaDur">—</b></div>
+      <div><span>Muestreo</span><b id="anMetaFs">—</b></div>
+      <div><span>Partes</span><b id="anMetaParts">—</b></div>
+      <div><span>Señal motor</span><b id="anMetaMotor">—</b></div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="group-title">Exportar</div>
+    <div class="field">
+      <label>Archivo de salida <span class="unit">.csv / .txt / .h5</span></label>
+      <input id="anExportName" type="text" value="export_analisis.h5">
+    </div>
+    <div class="pillrow">
+      <button class="pill" id="anExportWindow">↓ Solo la ventana</button>
+      <button class="pill" id="anExportAll">↓ Sesión completa</button>
+    </div>
+    <div class="an-note">
+      Se escribe dentro de la raíz permitida. Ojo con la sesión completa en CSV:
+      437 s × 27 columnas ≈ 4 GB; en <b>.h5</b> ocupa mucho menos.
+    </div>
+  </section>
+
+  <div class="footstrip">
+    <div class="left"><span>FastAPI · /api/analysis</span></div>
+    <div>Motor de cálculo compartido con la app de escritorio</div>
+  </div>
+</main>
+</div><!-- /viewAnalysis -->
 
 <script src="easteregg-hamster.js"></script>
 <script src="app.js"></script>
+<script src="chart.js"></script>
+<script src="analysis.js"></script>
 </body>
 </html>

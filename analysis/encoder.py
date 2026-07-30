@@ -134,14 +134,34 @@ def velocity_from_counts(
 
     w = max(1, int(window_samples))
     inc = np.diff(counts.astype(np.float64))  # cuentas por muestra (len n-1)
-
-    if w == 1:
-        smoothed = inc
-    else:
-        kernel = np.ones(w, dtype=np.float64) / w
-        smoothed = np.convolve(inc, kernel, mode="same")
+    smoothed = inc if w == 1 else _moving_average_same(inc, w)
 
     cps = smoothed / dt  # cuentas por segundo
     # Alinear a longitud n (la muestra 0 hereda el primer valor).
     cps = np.concatenate(([cps[0]], cps))
     return counts_per_sec_to_velocity(cps, unit)
+
+
+def _moving_average_same(a: np.ndarray, w: int) -> np.ndarray:
+    """Media móvil de ancho ``w``, equivalente a ``np.convolve(a, ones(w)/w, "same")``.
+
+    Se calcula con sumas acumuladas, así que cuesta **O(n)** en lugar del O(n·w)
+    de la convolución directa. La diferencia es de otro orden de magnitud en el
+    uso real: una ventana de 20 s a 30 kHz con suavizado de 500 ms son 600 000
+    muestras × 15 000 de kernel ≈ 9·10⁹ operaciones con `np.convolve` (segundos),
+    frente a dos pasadas lineales aquí (milisegundos). Eso es lo que hace que se
+    pueda navegar de forma interactiva.
+
+    Réplica exacta del modo "same" de NumPy, relleno con ceros incluido: la
+    convolución completa mide ``n + w − 1`` y "same" toma los ``n`` centrales
+    empezando en ``(w−1)//2``, de modo que la muestra ``i`` promedia
+    ``a[i+o−w+1 … i+o]`` (recortado a los extremos) dividido siempre por ``w``.
+    """
+    n = a.shape[0]
+    offset = (w - 1) // 2
+    # cum[k] = suma de a[0..k-1]  →  suma de a[lo..hi-1] = cum[hi] - cum[lo]
+    cum = np.concatenate(([0.0], np.cumsum(a)))
+    idx = np.arange(n)
+    hi = np.minimum(n, idx + offset + 1)
+    lo = np.maximum(0, idx + offset - w + 1)
+    return (cum[hi] - cum[lo]) / w

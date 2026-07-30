@@ -3,10 +3,16 @@ import sys
 import uvicorn
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+# La raíz del repo hace falta para importar el paquete `analysis` (motor de la
+# vista de análisis offline, compartido con la app de escritorio).
+REPO_ROOT = os.path.dirname(BACKEND_DIR)
 
-# Agrega backend/ al PYTHONPATH para que el subprocess de reload también lo herede
+# Ambos al PYTHONPATH para que el subprocess de reload también los herede
 sys.path.insert(0, BACKEND_DIR)
-os.environ["PYTHONPATH"] = BACKEND_DIR + os.pathsep + os.environ.get("PYTHONPATH", "")
+sys.path.insert(0, REPO_ROOT)
+os.environ["PYTHONPATH"] = os.pathsep.join(
+    [BACKEND_DIR, REPO_ROOT, os.environ.get("PYTHONPATH", "")]
+)
 
 if __name__ == "__main__":
     uvicorn.run(

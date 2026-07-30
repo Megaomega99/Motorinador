@@ -228,6 +228,84 @@ def test_analysis_readme_documents_the_export_columns() -> None:
         assert column in text, f"columna sin documentar: {column}"
 
 
+# ── vista de análisis: contrato frontend ↔ API ───────────────────
+
+ANALYSIS_JS = ROOT / "frontend" / "analysis.js"
+CHART_JS = ROOT / "frontend" / "chart.js"
+
+
+def _js_globals(text: str) -> set[str]:
+    return set(re.findall(r"^(?:const|let|var|function|async function)\s+([A-Za-z_$][\w$]*)",
+                          text, re.MULTILINE))
+
+
+def test_analysis_view_dom_ids_all_exist() -> None:
+    """Todo id que busca analysis.js debe existir en el HTML.
+
+    Es el fallo típico al partir una interfaz en dos vistas: un `anEl('...')`
+    apuntando a un id que se renombró, que solo se ve al usarla.
+    """
+    js = ANALYSIS_JS.read_text(encoding="utf-8")
+    html = INDEX_HTML.read_text(encoding="utf-8")
+    ids = set(re.findall(r'id="([^"]+)"', html))
+    used = set(re.findall(r"anEl\('([^']+)'\)", js))
+    used |= set(re.findall(r"getElementById\('([^']+)'\)", js))
+    assert used, "no se detectó ningún acceso al DOM"
+    assert used <= ids, f"ids inexistentes en el HTML: {sorted(used - ids)}"
+    # Los canvas de los cuatro paneles se referencian por plantilla.
+    for key in ("elec", "angle", "vel", "motor"):
+        assert f'id="anCanvas_{key}"' in html, key
+
+
+def test_analysis_scripts_do_not_collide_with_the_control_view() -> None:
+    """app.js y analysis.js comparten el ámbito global de la página."""
+    control = _js_globals(APP_JS.read_text(encoding="utf-8"))
+    analysis = _js_globals(ANALYSIS_JS.read_text(encoding="utf-8"))
+    chart = _js_globals(CHART_JS.read_text(encoding="utf-8"))
+    assert not (control & analysis), f"colisión app/analysis: {sorted(control & analysis)}"
+    assert not (control & chart), f"colisión app/chart: {sorted(control & chart)}"
+    assert not (analysis & chart), f"colisión analysis/chart: {sorted(analysis & chart)}"
+
+
+def test_analysis_view_sends_only_known_window_fields() -> None:
+    from app.routes.analysis import ExportPayload, WindowPayload
+
+    js = ANALYSIS_JS.read_text(encoding="utf-8")
+    known = set(WindowPayload.model_fields) | set(ExportPayload.model_fields)
+    # Cada objeto `body` que se manda a la API.
+    for block in re.findall(r"const body = \{(.*?)\n  \};", js, re.DOTALL):
+        sent = set(re.findall(r"^\s{4}([a-z_0-9]+):", block, re.MULTILINE))
+        assert sent, "no se detectaron campos en el cuerpo de la petición"
+        assert sent <= known, f"campos que la API no acepta: {sorted(sent - known)}"
+
+
+def test_analysis_view_reads_fields_the_api_returns() -> None:
+    """Los campos de metadatos/gearing que pinta la UI deben existir en la API."""
+    js = ANALYSIS_JS.read_text(encoding="utf-8")
+    meta_fields = set(re.findall(r"\bm\.([a-z_0-9]+)", js))
+    known_meta = {"path", "n_samples", "duration_s", "sample_rate_hz", "n_parts",
+                  "electrodes", "has_motor", "motor_channel", "gearing"}
+    assert meta_fields <= known_meta, f"campos de meta inexistentes: {sorted(meta_fields - known_meta)}"
+
+    gear_fields = set(re.findall(r"\bg\.([a-z_0-9]+)", js))
+    known_gear = {"ratio", "median_ratio", "n_steady", "n_stall", "stall_pct",
+                  "motor_revs", "enc_revs"}
+    assert gear_fields <= known_gear, f"campos de gearing inexistentes: {sorted(gear_fields - known_gear)}"
+
+
+def test_analysis_endpoints_used_by_the_view_exist() -> None:
+    """Cada ruta que llama el frontend debe estar registrada en el router."""
+    from app.routes.analysis import router
+
+    js = ANALYSIS_JS.read_text(encoding="utf-8")
+    called = set(re.findall(r"anApi\('(/[a-z/]+)", js))
+    called |= {m.split("?")[0] for m in re.findall(r"anApi\(`(/[a-z/]+)", js)}
+    called |= {"/browse"}      # se construye con concatenación de query
+    registered = {r.path.replace("/api/analysis", "") for r in router.routes}
+    assert called, "no se detectó ninguna llamada a la API"
+    assert called <= registered, f"rutas inexistentes: {sorted(called - registered)}"
+
+
 def test_every_status_field_the_ui_needs_is_actually_populated() -> None:
     """Los campos que pinta la UI deben venir rellenos en un frame real."""
     line = "Tgt:5.0RPM  Mot:4.9RPM  Enc:9.7RPM  Ang:12.3deg  Dir:FWD  CORRIENDO"

@@ -3,3 +3,9 @@ uvicorn[standard]>=0.30.0
 pyserial>=3.5
 pyserial-asyncio>=0.6
 pydantic-settings>=2.0.0
+# Análisis offline — el backend sirve también la vista de análisis, que usa el
+# paquete `analysis/` de la raíz del repo. Ver analysis/requirements.txt.
+numpy>=1.26
+pandas>=2.0
+h5py>=3.10
+neo>=0.13          # lector del binario Intan .rhs (memmap)

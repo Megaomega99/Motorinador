@@ -78,3 +78,61 @@ def test_velocity_constant_rotation():
     # En el interior (lejos de bordes) debe rondar 60 RPM.
     mid = vel[fs // 2]
     assert mid == pytest.approx(60.0, rel=0.05)
+
+
+# ── media móvil por sumas acumuladas ─────────────────────────────
+
+
+@pytest.mark.parametrize("w", [1, 2, 3, 4, 7, 8, 50, 101])
+def test_moving_average_matches_numpy_convolve(w):
+    """La versión O(n) debe dar exactamente lo mismo que np.convolve "same"."""
+    from analysis.encoder import _moving_average_same
+
+    rng = np.random.default_rng(7)
+    a = rng.normal(0, 3, 500)
+    ref = np.convolve(a, np.ones(w) / w, mode="same")
+    assert np.allclose(_moving_average_same(a, w), ref, atol=1e-12)
+
+
+def test_moving_average_preserves_length_with_a_huge_window():
+    """Con ventana mayor que la señal se conserva la longitud de la señal.
+
+    Aquí NO se imita a `np.convolve`, que en modo "same" devuelve `max(n, w)`
+    puntos: esa rareza era un bug latente, porque `velocity_from_counts` asume
+    que el suavizado tiene la misma longitud que su entrada y devolvía arrays
+    de longitud equivocada cuando la ventana superaba a la grabación.
+    """
+    from analysis.encoder import _moving_average_same
+
+    a = np.array([1.0, 2.0, 3.0])
+    out = _moving_average_same(a, 10)
+    assert out.shape == (3,)
+    # Con w > n la ventana de cada muestra abarca toda la señal: (1+2+3)/10.
+    assert np.allclose(out, 0.6)
+
+
+def test_velocity_length_is_preserved_when_window_exceeds_the_signal():
+    counts = np.arange(200, dtype=np.int64)
+    out = velocity_from_counts(counts, 1 / 30000, 15_000, VelocityUnit.RPM)
+    assert out.shape == (200,)
+
+
+def test_velocity_is_linear_in_cost_not_quadratic():
+    """Una ventana de suavizado enorme no debe multiplicar el tiempo de cálculo.
+
+    Con `np.convolve` el coste es O(n·w) y esto tardaba segundos; con sumas
+    acumuladas es O(n) y el ancho de ventana deja de importar.
+    """
+    import time
+
+    counts = np.cumsum(np.random.default_rng(0).integers(0, 2, 600_000)).astype(np.int64)
+
+    def timeit(w):
+        t = time.perf_counter()
+        velocity_from_counts(counts, 1 / 30000, w, VelocityUnit.RPM)
+        return time.perf_counter() - t
+
+    slow = timeit(15_000)
+    fast = timeit(150)
+    # Un kernel 100× mayor no debe costar ni el triple.
+    assert slow < max(0.05, fast * 3.0), f"w=15000 tardó {slow:.3f}s vs w=150 {fast:.3f}s"

@@ -117,6 +117,90 @@ def test_export_csv_includes_motor_columns(tmp_path):
     assert df["step_count"].is_monotonic_increasing
 
 
+# ── metadatos reproducibles ──────────────────────────────────────
+
+
+def test_hdf5_records_the_smoothing_windows(tmp_path):
+    """Sin esto, dos exportaciones con distinto suavizado son indistinguibles.
+
+    Pasó de verdad: hubo que deducir las ventanas por fuerza bruta comparando el
+    archivo exportado contra la grabación original.
+    """
+    path, n = _make_motor_cache(tmp_path)
+    out = str(tmp_path / "meta.h5")
+    with SessionCache(path) as c:
+        fs = c.sample_rate_hz
+        export(c, out, AngleUnit.DEG, VelocityUnit.RPM,
+               window_samples=1530,             # 51 ms a 30 kHz
+               motor_window_samples=30300,      # 1010 ms
+               gear_ratio=2.0, chunk_samples=7000)
+
+    with h5py.File(out, "r") as h5:
+        assert h5.attrs["window_samples"] == 1530
+        assert h5.attrs["window_ms"] == pytest.approx(1530 / fs * 1000)
+        assert h5.attrs["motor_window_samples"] == 30300
+        assert h5.attrs["motor_window_ms"] == pytest.approx(30300 / fs * 1000)
+
+
+def test_hdf5_records_provenance_and_geometry(tmp_path):
+    from analysis.units import COUNTS_PER_REV, STEPS_PER_REV
+
+    path, n = _make_motor_cache(tmp_path)
+    out = str(tmp_path / "prov.h5")
+    with SessionCache(path) as c:
+        export(c, out, AngleUnit.DEG, VelocityUnit.RPM, window_samples=1500,
+               gear_ratio=2.0, chunk_samples=7000)
+        src = c.source_path
+
+    with h5py.File(out, "r") as h5:
+        assert h5.attrs["source_path"] == src
+        assert h5.attrs["n_parts"] == 1
+        assert h5.attrs["counts_per_rev"] == COUNTS_PER_REV
+        assert h5.attrs["steps_per_rev"] == STEPS_PER_REV
+        assert h5.attrs["motor_channel"] == "ANALOG-IN-2"
+
+
+def test_hdf5_omits_motor_metadata_without_the_signal(tmp_path):
+    path, n = _make_cache(tmp_path)
+    out = str(tmp_path / "nomotor.h5")
+    with SessionCache(path) as c:
+        export(c, out, AngleUnit.DEG, VelocityUnit.RPM, window_samples=20)
+    with h5py.File(out, "r") as h5:
+        assert h5.attrs["has_motor"] is np.False_ or not h5.attrs["has_motor"]
+        for key in ("motor_window_samples", "motor_window_ms", "gear_ratio"):
+            assert key not in h5.attrs, key
+        # El suavizado del encoder sí, que la columna omega existe siempre.
+        assert h5.attrs["window_samples"] == 20
+
+
+def test_exported_columns_are_reproducible_from_the_metadata(tmp_path):
+    """El archivo debe bastar para recalcular sus propias columnas.
+
+    Es la prueba de fuego de que los metadatos sirven: se leen las ventanas del
+    propio archivo y se reconstruye `omega` desde los canales digitales crudos.
+    """
+    from analysis.encoder import QuadratureDecoder, velocity_from_counts
+
+    path, n = _make_motor_cache(tmp_path)
+    out = str(tmp_path / "repro.h5")
+    with SessionCache(path) as c:
+        export(c, out, AngleUnit.DEG, VelocityUnit.RPM, window_samples=1234,
+               motor_window_samples=9876, gear_ratio=2.0, chunk_samples=30000)
+
+    with h5py.File(out, "r") as h5:
+        w = int(h5.attrs["window_samples"])
+        fs = float(h5.attrs["sample_rate_hz"])
+        a = h5["DIGITAL-IN-01"][:].astype(float)
+        b = h5["DIGITAL-IN-02"][:].astype(float)
+        omega = h5["omega_RPM"][:]
+
+    counts = QuadratureDecoder().process(a, b)
+    rebuilt = velocity_from_counts(counts, 1.0 / fs, w, VelocityUnit.RPM)
+    # Se recorta el relleno: en los bordes el export vio datos de fuera del tramo.
+    core = slice(w, -w)
+    assert np.allclose(omega[core], rebuilt[core], atol=1e-4)
+
+
 # ── rango de exportación ─────────────────────────────────────────
 
 

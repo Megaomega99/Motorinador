@@ -175,6 +175,11 @@ class SessionCache:
             raw_ch = raw_ch.decode()
         self.motor_channel: str | None = str(raw_ch) or None
         self.n_parts = int(self._h5.attrs.get("n_parts", 1))
+        # Ruta de la grabación de origen, para dejar constancia en lo exportado.
+        raw_src = self._h5.attrs.get("source_path", "")
+        if isinstance(raw_src, bytes):
+            raw_src = raw_src.decode()
+        self.source_path: str = str(raw_src)
         # Los conteos caben holgados en RAM (~8 MB/millón) → base de ángulo,
         # velocidad, velocidad de motor y deslizamiento.
         self.counts: np.ndarray = self._h5["counts"][:]

@@ -69,6 +69,8 @@ class SerialLink:
     def __init__(self) -> None:
         self._writer: Optional[asyncio.StreamWriter] = None
         self._connected = False
+        # True si el intento actual llegó a abrir el puerto (ver run()).
+        self._opened = False
         self._cmd_lock = asyncio.Lock()
         self._pending_target: Optional[float] = None
         self._debounce_task: Optional[asyncio.Task] = None
@@ -80,14 +82,63 @@ class SerialLink:
     # ── lifecycle ──────────────────────────────────────────────
 
     async def run(self) -> None:
+        """Mantiene la conexión serial, reintentando sin llenar el log.
+
+        Sin Arduino conectado esto reintentaba cada 2 s y emitía el mismo aviso
+        —con las 32 UART del sistema listadas— indefinidamente. Ahora:
+
+          · el aviso se emite **una vez por causa**: mientras el fallo no cambie
+            se repite solo a nivel DEBUG,
+          · la espera crece de `serial_reconnect_interval` hasta
+            `serial_reconnect_max` mientras la causa siga siendo la misma,
+          · una desconexión real (tras haber abierto el puerto) siempre se avisa
+            y reinicia la espera, para no tardar 30 s en reconectar,
+          · con `MOTORINADOR_PORT=off` no se intenta nada.
+
+        No se ata al estado de la interfaz a propósito: el backend puede tener
+        varios clientes y, si enchufas el Arduino mientras miras la pestaña de
+        análisis, debe conectarse igual.
+        """
+        if not settings.serial_enabled:
+            logger.info(
+                "Serial desactivado (MOTORINADOR_PORT=%r). Solo análisis offline; "
+                "los comandos del motor responderán 503.", settings.port,
+            )
+            return
+
+        delay = settings.serial_reconnect_interval
+        last_error: str | None = None
         while True:
+            self._opened = False
             try:
                 await self._connect_and_read()
+                # Cierre limpio tras haber estado conectado: reintento inmediato.
+                delay = settings.serial_reconnect_interval
+                last_error = None
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
-                logger.warning("Serial error: %s — retrying in %.1fs", exc, settings.serial_reconnect_interval)
                 self._connected = False
-                await motor_state.broadcast(WsError(msg=f"Serial port disconnected: {exc}"))
-                await asyncio.sleep(settings.serial_reconnect_interval)
+                message = str(exc)
+                # Novedad = causa distinta, o caída de una conexión que sí existía.
+                is_news = self._opened or message != last_error
+                if is_news:
+                    last_error = message
+                    logger.warning("Serial: %s", message)
+                    if not self._opened:
+                        logger.info(
+                            "Se reintentará en segundo plano (hasta cada %.0f s) y solo "
+                            "se volverá a avisar si cambia la causa.",
+                            settings.serial_reconnect_max,
+                        )
+                    await motor_state.broadcast(WsError(msg=f"Puerto serial no disponible: {message}"))
+                else:
+                    logger.debug("Serial sigue no disponible (reintento en %.0f s)", delay)
+
+                if self._opened:
+                    delay = settings.serial_reconnect_interval
+                await asyncio.sleep(delay)
+                delay = min(delay * 2.0, settings.serial_reconnect_max)
 
     def _resolve_port(self) -> Optional[str]:
         """Resuelve el puerto a usar: detección automática o puerto fijo."""
@@ -110,6 +161,7 @@ class SerialLink:
             url=port, baudrate=settings.baud
         )
         self._writer = writer
+        self._opened = True
         # Wait for Arduino reset after USB connect
         await asyncio.sleep(2.0)
         self._connected = True

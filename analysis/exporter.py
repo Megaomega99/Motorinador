@@ -31,7 +31,13 @@ import h5py
 import numpy as np
 
 from .processing import SessionCache
-from .units import GEAR_RATIO_DEFAULT, AngleUnit, VelocityUnit
+from .units import (
+    COUNTS_PER_REV,
+    GEAR_RATIO_DEFAULT,
+    STEPS_PER_REV,
+    AngleUnit,
+    VelocityUnit,
+)
 
 ProgressCb = Callable[[float], None]
 
@@ -115,6 +121,42 @@ def _units_row(
     return ["s", "", "", *["uV"] * n_elec, angle_unit.value, vel_unit.value, *motor]
 
 
+def _write_metadata(h5, cache, angle_unit, vel_unit, window_samples, motor_window,
+                    gear_ratio, start, stop) -> None:
+    """Deja en el archivo TODO lo necesario para reproducir sus columnas.
+
+    Sin esto, dos exportaciones del mismo tramo con distinto suavizado son
+    indistinguibles a posteriori: hubo que deducir las ventanas por fuerza bruta
+    comparando contra la grabación original. Las ventanas se guardan en muestras
+    (lo que se usó de verdad) y en ms (legible); la geometría queda también, para
+    que el archivo se pueda reinterpretar sin consultar el firmware.
+    """
+    fs = cache.sample_rate_hz
+    h5.attrs["angle_unit"] = angle_unit.value
+    h5.attrs["velocity_unit"] = vel_unit.value
+    h5.attrs["sample_rate_hz"] = fs
+    h5.attrs["has_motor"] = bool(cache.has_motor)
+    h5.attrs["t_start_s"] = start * cache.dt
+    h5.attrs["t_stop_s"] = stop * cache.dt
+
+    # Suavizado del encoder (columna omega_*)
+    h5.attrs["window_samples"] = int(window_samples)
+    h5.attrs["window_ms"] = round(window_samples / fs * 1000.0, 6) if fs else 0.0
+
+    # Procedencia y geometría
+    h5.attrs["source_path"] = cache.source_path
+    h5.attrs["n_parts"] = int(cache.n_parts)
+    h5.attrs["counts_per_rev"] = COUNTS_PER_REV
+    h5.attrs["steps_per_rev"] = STEPS_PER_REV
+
+    if cache.has_motor:
+        # Suavizado usado para la columna slip (más largo: los engranajes resuenan)
+        h5.attrs["motor_window_samples"] = int(motor_window)
+        h5.attrs["motor_window_ms"] = round(motor_window / fs * 1000.0, 6) if fs else 0.0
+        h5.attrs["gear_ratio"] = float(gear_ratio)
+        h5.attrs["motor_channel"] = cache.motor_channel or ""
+
+
 def _export_tabular(cache, out_path, angle_unit, vel_unit, window_samples, names,
                     chunk_samples, progress_cb, gear_ratio, motor_window,
                     start, stop) -> None:
@@ -144,14 +186,8 @@ def _export_hdf5(cache, out_path, angle_unit, vel_unit, window_samples, names,
                  start, stop) -> None:
     n = stop - start
     with h5py.File(out_path, "w") as h5:
-        h5.attrs["angle_unit"] = angle_unit.value
-        h5.attrs["velocity_unit"] = vel_unit.value
-        h5.attrs["sample_rate_hz"] = cache.sample_rate_hz
-        h5.attrs["has_motor"] = bool(cache.has_motor)
-        h5.attrs["t_start_s"] = start * cache.dt
-        h5.attrs["t_stop_s"] = stop * cache.dt
-        if cache.has_motor:
-            h5.attrs["gear_ratio"] = float(gear_ratio)
+        _write_metadata(h5, cache, angle_unit, vel_unit, window_samples,
+                        motor_window, gear_ratio, start, stop)
         time_ds = h5.create_dataset("time", (n,), dtype=np.float64, chunks=(min(chunk_samples, n),))
         a_ds = h5.create_dataset("DIGITAL-IN-01", (n,), dtype=np.uint8)
         b_ds = h5.create_dataset("DIGITAL-IN-02", (n,), dtype=np.uint8)

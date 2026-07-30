@@ -27,8 +27,11 @@ siguió la consigna y delata pasos perdidos o atascos.
 > las medidas, está en
 > [docs/superpowers/specs/2026-07-29-motor-signal-y-retirada-del-PI-design.md](docs/superpowers/specs/2026-07-29-motor-signal-y-retirada-del-PI-design.md).
 
-Para el análisis **offline** de las grabaciones (electrodos + encoder + señal del
-motor) hay una herramienta aparte: [analysis/README.md](analysis/README.md).
+El **análisis offline** de las grabaciones (electrodos + encoder + señal del motor)
+está en la **misma interfaz**, en la pestaña «Análisis de grabaciones»: abre un
+`.rhs` o una carpeta de sesión completa, navega con zoom y arrastre, y exporta.
+Comparte el motor de cálculo con la app de escritorio equivalente — ver
+[analysis/README.md](analysis/README.md).
 
 ---
 
@@ -50,7 +53,7 @@ motor) hay una herramienta aparte: [analysis/README.md](analysis/README.md).
 > **Antes de conectar cualquier cosa, asegúrate de que todo esté apagado.**
 
 > **⚠️ Nota sobre la placa (Nano 33 BLE vs Nano Every).** Las conexiones usan los
-> **mismos números de pin (D4–D11)** en ambas placas, así que a nivel de esquema
+> **mismos números de pin (D2–D11)** en ambas placas, así que a nivel de esquema
 > **no cambia ningún cable**. La diferencia crítica es que el **Nano 33 BLE es de
 > 3.3 V y NO tolera 5 V** (el Nano Every es de 5 V y sí tolera). En el 33 BLE:
 >
@@ -230,6 +233,10 @@ Si tienes varios dispositivos USB conectados y quieres forzar uno específico, p
 
 Para volver a la detección automática: `export MOTORINADOR_PORT=auto` (o simplemente no definir la variable).
 
+Y para **trabajar sin Arduino** (solo la pestaña de análisis), `off` desactiva el
+serial por completo, así no se reintenta ni se avisa:
+`export MOTORINADOR_PORT=off` (también valen `none`, `no`, `disabled`).
+
 > Puedes ver qué puertos detecta el sistema visitando `http://localhost:8000/api/ports` mientras el servidor está corriendo.
 
 ---
@@ -323,7 +330,56 @@ La parte inferior muestra en tiempo real todos los mensajes que llegan del Ardui
 
 ---
 
+## La pestaña «Análisis de grabaciones»
+
+La misma aplicación analiza las grabaciones del Intan sin tocar el Arduino. Usa el
+paquete [analysis/](analysis/README.md) como motor, así que los números son
+idénticos a los de la app de escritorio.
+
+1. **Elige la grabación** en el navegador de archivos de la izquierda. Si una
+   carpeta contiene varios `.rhs` (Intan parte las tomas largas en archivos de un
+   minuto), aparece arriba **«Abrir esta sesión completa»**: los une en una sola
+   grabación continua.
+2. **Espera la barra de progreso.** La toma de referencia (8 archivos, 1.3 GB,
+   437 s) tarda unos **3 s** en procesarse.
+3. **Navega**: la tira superior muestra toda la sesión — clic o arrastre para
+   saltar. En las gráficas, **arrastra** para desplazar, **rueda** para zoom y
+   **doble clic** para volver a verlo todo. El cursor lee los valores de las
+   cuatro gráficas a la vez.
+4. **Cuatro gráficas** con el mismo eje de tiempo: electrodos, ángulo, velocidad
+   del encoder y **motor** (consigna del espejo STEP frente a la medida referida
+   al eje del motor). El hueco entre esas dos curvas es el deslizamiento.
+5. **Exporta** solo la ventana visible o la sesión completa, con las columnas
+   derivadas añadidas (ver [analysis/README.md](analysis/README.md#columnas-del-export)).
+
+### Dónde puede leer y escribir
+
+Por seguridad el servidor solo abre y escribe **dentro de una carpeta raíz**, que
+por defecto es la del proyecto. Ni `..` ni un enlace simbólico sacan de ahí. Si
+guardas las tomas en otro sitio:
+
+```bash
+MOTORINADOR_ANALYSIS_ROOT=/ruta/a/mis/grabaciones python backend/main.py
+```
+
+> Solo hay **una sesión abierta a la vez**: son ~230 MB en RAM y una caché
+> temporal de ~1.4 GB en disco, que se borra al cerrar la sesión o el servidor.
+
+---
+
 ## Solución de problemas
+
+**La consola repite avisos del puerto serial**
+
+→ Ya no debería: el aviso se emite **una vez por causa** y los reintentos van
+espaciándose (2 s → 30 s). Si solo quieres analizar grabaciones y no tienes el
+Arduino conectado, arranca sin serial y no se intentará nada:
+
+```bash
+MOTORINADOR_PORT=off python backend/main.py
+```
+
+La pestaña de análisis funciona igual; los comandos del motor responden 503.
 
 **La luz POWER está roja o apagada**
 → El Arduino no está conectado. Verifica el cable USB. El sistema busca el puerto automáticamente, así que normalmente basta con conectar la placa y esperar un par de segundos. Si sigue sin conectar, visita `http://localhost:8000/api/ports` para ver qué puertos detecta el sistema y, si es necesario, fuerza uno con `MOTORINADOR_PORT`.

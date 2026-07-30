@@ -1,7 +1,18 @@
-# Análisis de encoder, motor y electrodos (GUI TkInter)
+# Análisis de encoder, motor y electrodos
 
-Herramienta de escritorio para inspeccionar **offline** las grabaciones de banco.
-Reconstruye, sin cargar la sesión entera en RAM:
+Este paquete es el **motor de cálculo** del análisis offline de las grabaciones de
+banco. Tiene **dos clientes que dan exactamente los mismos números**:
+
+| Cliente | Cómo se lanza | Cuándo conviene |
+|---|---|---|
+| **Vista web** (recomendada) | pestaña «Análisis de grabaciones» de la interfaz — `python backend/main.py` | Zoom/arrastre nativos, cursor con lectura de las cuatro gráficas, una sola app |
+| **App de escritorio (Tk)** | `python -m analysis.app` | Sin servidor; útil si solo quieres analizar y no tocar el Arduino |
+
+La vista web habla con `/api/analysis/*`, que envuelve este mismo paquete: no
+recalcula nada, solo lo sirve por HTTP con las series ya decimadas. Hay un test
+que comprueba que el resultado por API y el directo coinciden bit a bit.
+
+Lo que hace, sin cargar la sesión entera en RAM:
 
 - el **ángulo** y la **velocidad angular** del encoder, desde las dos señales
   digitales de cuadratura, y
@@ -24,9 +35,9 @@ pip install -r analysis/requirements.txt
 
 ## Uso
 
-```bash
-python -m analysis.app
-```
+Vista web: `python backend/main.py` → `http://localhost:8000` → pestaña
+**«Análisis de grabaciones»**. App de escritorio: `python -m analysis.app`.
+Los pasos son los mismos en las dos:
 
 1. **Abrir archivo** `.txt` (export tabular de Intan) o `.rhs` (binario Intan), o
    **Abrir carpeta de sesión** para tratar los varios `.rhs` de una toma como una
@@ -113,7 +124,29 @@ Si la grabación trae el espejo STEP, además:
 | `motor_rpm` | RPM | velocidad **comandada** del motor (exacta) |
 | `slip` | frac. [0,1] | deslizamiento: 0 sigue la consigna, 1 eje bloqueado |
 
-En HDF5 se guarda también `gear_ratio` como atributo.
+### Metadatos del HDF5
+
+El `.h5` guarda todo lo necesario para **reproducir sus propias columnas** sin
+volver a la grabación original:
+
+| Atributo | Para qué |
+|---|---|
+| `window_samples` / `window_ms` | suavizado usado en `omega_*` |
+| `motor_window_samples` / `motor_window_ms` | suavizado usado en `slip` |
+| `gear_ratio`, `motor_channel` | relación aplicada y canal del espejo STEP |
+| `t_start_s`, `t_stop_s` | tramo exportado dentro de la sesión |
+| `source_path`, `n_parts` | de qué grabación salió y si era multiarchivo |
+| `counts_per_rev`, `steps_per_rev` | geometría, para reinterpretar sin el firmware |
+| `angle_unit`, `velocity_unit`, `sample_rate_hz`, `has_motor` | unidades y muestreo |
+
+Las ventanas están porque hicieron falta: sin ellas, dos exportaciones del mismo
+tramo con distinto suavizado son indistinguibles, y recuperarlas obliga a
+compararlas por fuerza bruta contra la grabación original. Hay un test que
+comprueba que `omega_*` se puede recalcular leyendo la ventana del propio archivo.
+
+> El export **tabular** (CSV/TXT) no tiene dónde guardar esto: su formato es la
+> cabecera de Intan (nombres + unidades) y añadir líneas rompería a quien lo lea.
+> Si necesitas la trazabilidad, exporta a `.h5`.
 
 ## Diseño (RAM plana)
 
@@ -140,8 +173,17 @@ Coste medido en la toma de referencia (8 archivos, 1.3 GB, 13.1 M muestras,
 | `processing.py` | Construcción del caché HDF5 + `SessionCache` + decimación. |
 | `stats.py` | Estadísticos de velocidad y resumen del motor. |
 | `exporter.py` | Exportación por segmentos a CSV/TXT/HDF5 con columnas nuevas. |
-| `ui/` | `controls`, `overview_strip`, `plot_panel`, `stats_panel`, `main_window`. |
-| `app.py` | Punto de entrada. |
+| `ui/` | Cliente de escritorio: `controls`, `overview_strip`, `plot_panel`, `stats_panel`, `main_window`. |
+| `app.py` | Punto de entrada de la app de escritorio. |
+
+El cliente web vive fuera de este paquete y lo consume por HTTP:
+
+| Archivo | Responsabilidad |
+|---------|-----------------|
+| `backend/app/analysis_service.py` | Sesión abierta, trabajos en segundo plano, confinamiento de rutas. |
+| `backend/app/routes/analysis.py` | Endpoints `/api/analysis/*`. |
+| `frontend/chart.js` | Graficador de canvas (sin dependencias). |
+| `frontend/analysis.js` | Vista: navegador de archivos, paneles, export. |
 
 ## Resultados sobre la toma de referencia
 
@@ -154,12 +196,23 @@ Coste medido en la toma de referencia (8 archivos, 1.3 GB, 13.1 M muestras,
 - Consignas recuperadas del espejo STEP: 3.02, 4.02, 5.00, 5.02, 6.99 RPM — valores
   limpios, como los fija el firmware.
 
+## Rendimiento
+
+La velocidad se suaviza con **sumas acumuladas**, no con `np.convolve`: el coste es
+O(n) en lugar de O(n·w). Con la ventana de motor de 500 ms sobre un tramo de 20 s a
+30 kHz la diferencia es de **~5 s a ~20 ms**, que es lo que hace viable navegar con
+zoom y arrastre. Una petición de ventana completa (cuatro gráficas + estadísticos)
+tarda **22–52 ms** sobre la sesión de 437 s.
+
 ## Tests
 
 ```bash
-pytest analysis/tests/ --cov=analysis
+pytest analysis/tests/ --cov=analysis     # motor de cálculo (131 tests)
+cd backend && pytest tests                # API + contratos entre capas (107)
+node --test frontend/tests/chart.test.js  # graficador de canvas (24)
 ```
 
-115 tests, cobertura ~89 %. Los de GUI se saltan si no hay `DISPLAY`. Incluye una
-validación cruzada sobre `intento_260724_104300` (se salta si no está) que
-comprueba que el ángulo del `.txt` y el del `.rhs` coinciden.
+Los de GUI Tk se saltan si no hay `DISPLAY`. Incluye una validación cruzada sobre
+`intento_260724_104300` (se salta si no está) que comprueba que el ángulo del `.txt`
+y el del `.rhs` coinciden, y un test que verifica que la API y el cálculo directo
+dan el mismo resultado.
