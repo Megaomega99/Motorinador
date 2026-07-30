@@ -6,50 +6,109 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 from typing import get_args
 
 import pytest
 from pydantic import ValidationError
 
-from app.models import CmdMessage, RPM_MAX, RPM_MIN, RPM_STEP, Params, SetTargetMessage
+from app.models import (
+    GEAR_RATIO,
+    RPM_MAX,
+    RPM_MIN,
+    RPM_STEP,
+    CmdMessage,
+    Params,
+    SetTargetMessage,
+    StatusFrame,
+)
 from app.routes.control import TargetPayload, post_cmd, update_params
 from app.routes.ws import _handle_client_message
-from app.serial_link import SerialLink, _parse_line, serial_link
+from app.serial_link import SerialLink, _enrich, _parse_line, serial_link
 from app.state import motor_state
 
 
 # ── _parse_line ──────────────────────────────────────────────────
 
 
-def test_parse_line_pi() -> None:
-    line = "[PI]  Tgt:30.0RPM  Meas:28.5RPM  Err:1.5  Ctrl:30.2RPM  Ang:185.4deg  Dir:FWD  CORRIENDO"
+def test_parse_line_running() -> None:
+    line = "Tgt:30.0RPM  Mot:29.8RPM  Enc:59.2RPM  Ang:185.4deg  Dir:FWD  CORRIENDO"
     frame = _parse_line(line)
     assert frame is not None
-    assert frame.use_pid is True
     assert frame.target_rpm == 30.0
-    assert frame.measured_rpm == 28.5
-    assert frame.pi_error == 1.5
-    assert frame.control_rpm == 30.2
+    assert frame.motor_rpm == 29.8
+    assert frame.enc_rpm == 59.2
     assert frame.angle_deg == 185.4
     assert frame.dir == "FWD"
     assert frame.running is True
 
 
-def test_parse_line_libre_negative_parado() -> None:
-    line = "[LIBRE]  Tgt:15.0RPM  Real:-14.8RPM  Ang:0.0deg  Dir:REV  PARADO"
+def test_parse_line_negative_parado() -> None:
+    """El signo de las velocidades codifica la dirección."""
+    line = "Tgt:15.0RPM  Mot:-7.4RPM  Enc:-14.8RPM  Ang:0.0deg  Dir:REV  PARADO"
     frame = _parse_line(line)
     assert frame is not None
-    assert frame.use_pid is False
     assert frame.target_rpm == 15.0
-    assert frame.real_rpm == -14.8
+    assert frame.motor_rpm == -7.4
+    assert frame.enc_rpm == -14.8
     assert frame.dir == "REV"
     assert frame.running is False
 
 
 def test_parse_line_garbage_returns_none() -> None:
     assert _parse_line("E-STOP") is None
-    assert _parse_line("Modo PI ON  — lazo cerrado velocidad") is None
+    assert _parse_line("Encoder -> 0") is None
     assert _parse_line("") is None
+
+
+def test_parse_line_ignores_old_pi_format() -> None:
+    """El formato antiguo con [PI]/[LIBRE] ya no existe: no debe colarse."""
+    old_pi = "[PI]  Tgt:30.0RPM  Meas:28.5RPM  Err:1.5  Ctrl:30.2RPM  Ang:1.0deg  Dir:FWD  CORRIENDO"
+    old_libre = "[LIBRE]  Tgt:15.0RPM  Real:-14.8RPM  Ang:0.0deg  Dir:REV  PARADO"
+    assert _parse_line(old_pi) is None
+    assert _parse_line(old_libre) is None
+
+
+# ── _enrich: velocidad lineal y deslizamiento ────────────────────
+
+
+def _frame(**kw) -> StatusFrame:
+    base = dict(target_rpm=10.0, motor_rpm=10.0, enc_rpm=10.0 * GEAR_RATIO,
+                angle_deg=0.0, dir="FWD", running=True)
+    base.update(kw)
+    return StatusFrame(**base)
+
+
+def test_enrich_uses_motor_speed_for_linear_velocity() -> None:
+    """La rueda va en el eje del motor, no en el del encoder."""
+    params = Params(radius_cm=100.0)          # r = 1 m → v = ω
+    out = _enrich(_frame(motor_rpm=60.0), params)
+    assert out.omega_rad_s == pytest.approx(2 * math.pi, rel=1e-3)
+    assert out.v_m_s == pytest.approx(2 * math.pi, rel=1e-3)
+
+
+def test_enrich_reports_zero_slip_when_motor_follows() -> None:
+    out = _enrich(_frame(target_rpm=10.0, motor_rpm=10.0), Params())
+    assert out.slip_pct == 0.0
+
+
+def test_enrich_reports_slip_when_steps_are_lost() -> None:
+    out = _enrich(_frame(target_rpm=10.0, motor_rpm=8.0), Params())
+    assert out.slip_pct == pytest.approx(20.0)
+
+
+def test_enrich_slip_is_clamped_and_uses_magnitude() -> None:
+    # Eje bloqueado → 100 %; girando más rápido de lo pedido → 0 %, no negativo.
+    assert _enrich(_frame(target_rpm=10.0, motor_rpm=0.0), Params()).slip_pct == 100.0
+    assert _enrich(_frame(target_rpm=10.0, motor_rpm=12.0), Params()).slip_pct == 0.0
+    # En reversa la magnitud es lo que cuenta.
+    assert _enrich(_frame(target_rpm=10.0, motor_rpm=-10.0), Params()).slip_pct == 0.0
+
+
+def test_enrich_omits_slip_when_stopped() -> None:
+    """Con el motor parado el deslizamiento no está definido."""
+    out = _enrich(_frame(running=False, motor_rpm=0.0), Params())
+    assert out.slip_pct is None
 
 
 # ── validación de objetivo (WS y REST unificados) ────────────────
@@ -123,12 +182,10 @@ def test_high_level_commands_send_expected_chars() -> None:
         await link.cmd_e_stop()
         await link.cmd_set_direction(forward=True)
         await link.cmd_set_direction(forward=False)
-        await link.cmd_set_mode(pid=True)
-        await link.cmd_set_mode(pid=False)
         await link.cmd_zero_encoder()
 
     asyncio.run(run_all())
-    assert writer.data == b"10efbplz"
+    assert writer.data == b"10efbz"
 
 
 def test_send_rejects_legacy_toggles() -> None:
@@ -136,6 +193,14 @@ def test_send_rejects_legacy_toggles() -> None:
     for legacy in ("s", "r", "c"):
         with pytest.raises(ValueError):
             asyncio.run(link.send(legacy))
+
+
+def test_send_rejects_retired_pi_mode_commands() -> None:
+    """'p'/'l' (modo PI) se retiraron del firmware: el backend no debe emitirlos."""
+    link, _ = _linked_fake()
+    for retired in ("p", "l"):
+        with pytest.raises(ValueError):
+            asyncio.run(link.send(retired))
 
 
 # ── despacho de comandos (WS y REST) sobre el singleton ──────────
@@ -150,8 +215,6 @@ CMD_TO_CHAR = {
     "zero_encoder": "z",
     "dir_fwd": "f",
     "dir_rev": "b",
-    "mode_pi": "p",
-    "mode_libre": "l",
 }
 
 
@@ -215,3 +278,49 @@ def test_update_params_overrides_rpm_fields() -> None:
         assert motor_state.params == result
     finally:
         motor_state.params = original
+
+
+def test_gear_ratio_defaults_to_the_measured_value() -> None:
+    assert Params().gear_ratio == GEAR_RATIO
+
+
+def test_update_params_accepts_a_new_gear_ratio() -> None:
+    original = motor_state.params
+    try:
+        result = asyncio.run(update_params(Params(gear_ratio=2.1)))
+        assert result.gear_ratio == 2.1
+    finally:
+        motor_state.params = original
+
+
+@pytest.mark.parametrize("bad", [0.0, -1.0])
+def test_non_positive_gear_ratio_rejected(bad: float) -> None:
+    """Un gear_ratio de 0 dividiría por cero al referir el encoder al motor."""
+    with pytest.raises(ValidationError):
+        Params(gear_ratio=bad)
+
+
+@pytest.mark.parametrize("bad", [0.0, -3.0])
+def test_non_positive_radius_rejected(bad: float) -> None:
+    with pytest.raises(ValidationError):
+        Params(radius_cm=bad)
+
+
+def test_ws_set_params_updates_gear_ratio(fake_serial) -> None:
+    original = motor_state.params
+    try:
+        payload = {"type": "set_params",
+                   "data": {**Params().model_dump(), "gear_ratio": 2.05}}
+        asyncio.run(_handle_client_message(json.dumps(payload)))
+        assert motor_state.params.gear_ratio == 2.05
+        # Los límites de RPM siguen siendo del servidor.
+        assert motor_state.params.rpm_max == RPM_MAX
+    finally:
+        motor_state.params = original
+
+
+def test_ws_set_params_rejects_bad_gear_ratio(fake_serial) -> None:
+    with pytest.raises(ValidationError):
+        asyncio.run(_handle_client_message(json.dumps(
+            {"type": "set_params", "data": {**Params().model_dump(), "gear_ratio": 0}}
+        )))

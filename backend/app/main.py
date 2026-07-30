@@ -9,8 +9,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from .analysis_service import analysis_service
 from .config import settings
-from .routes import control, ws
+from .routes import analysis, control, ws
 from .serial_link import serial_link
 
 FRONTEND_DIR = pathlib.Path(__file__).parent.parent.parent / "frontend"  # backend/app/ → backend/ → Motorinador/ → frontend/
@@ -34,6 +35,8 @@ async def lifespan(app: FastAPI):
             await serial_task
         except asyncio.CancelledError:
             pass
+        # Cierra la sesión de análisis y borra su caché temporal (~1.4 GB).
+        analysis_service.close()
         logger.info("Motorinador backend stopped")
 
 
@@ -54,6 +57,7 @@ async def healthz() -> dict:
 
 
 app.include_router(control.router)
+app.include_router(analysis.router)
 app.include_router(ws.router)
 
 # Sirve el frontend estático — debe ir AL FINAL para no interceptar las rutas de la API

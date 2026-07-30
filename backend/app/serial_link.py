@@ -16,21 +16,11 @@ from .state import motor_state
 
 logger = logging.getLogger(__name__)
 
-# [PI]  Tgt:30.0RPM  Meas:28.5RPM  Err:1.5  Ctrl:30.2RPM  Ang:185.4deg  Dir:FWD  CORRIENDO
-_STATUS_PI_RE = re.compile(
-    r"\[PI\]\s+Tgt:([-+]?\d+\.?\d*)RPM\s+"
-    r"Meas:([-+]?\d+\.?\d*)RPM\s+"
-    r"Err:([-+]?\d+\.?\d*)\s+"
-    r"Ctrl:([-+]?\d+\.?\d*)RPM\s+"
-    r"Ang:([-+]?\d+\.?\d*)deg\s+"
-    r"Dir:(FWD|REV)\s+"
-    r"(CORRIENDO|PARADO)"
-)
-
-# [LIBRE]  Tgt:30.0RPM  Real:28.5RPM  Ang:185.4deg  Dir:FWD  CORRIENDO
-_STATUS_LIBRE_RE = re.compile(
-    r"\[LIBRE\]\s+Tgt:([-+]?\d+\.?\d*)RPM\s+"
-    r"Real:([-+]?\d+\.?\d*)RPM\s+"
+# Tgt:30.0RPM  Mot:-29.8RPM  Enc:-59.2RPM  Ang:185.4deg  Dir:REV  CORRIENDO
+_STATUS_RE = re.compile(
+    r"Tgt:([-+]?\d+\.?\d*)RPM\s+"
+    r"Mot:([-+]?\d+\.?\d*)RPM\s+"
+    r"Enc:([-+]?\d+\.?\d*)RPM\s+"
     r"Ang:([-+]?\d+\.?\d*)deg\s+"
     r"Dir:(FWD|REV)\s+"
     r"(CORRIENDO|PARADO)"
@@ -39,52 +29,48 @@ _STATUS_LIBRE_RE = re.compile(
 # Comandos de un carácter aceptados por el firmware (idempotentes salvo +/-).
 # '+'/'-' no los emite ningún flujo del backend hoy (la UI usa objetivos
 # absolutos vía 'v'), pero se permiten por ser parte del protocolo.
-# Los toggles legados 's'/'r'/'c' existen en firmware pero el backend no los usa.
-VALID_CMDS = frozenset({"+", "-", "z", "0", "1", "e", "f", "b", "p", "l"})
+# Los toggles legados 's'/'r' existen en firmware pero el backend no los usa.
+VALID_CMDS = frozenset({"+", "-", "z", "0", "1", "e", "f", "b"})
 
 
 def _parse_line(line: str) -> Optional[StatusFrame]:
-    m = _STATUS_PI_RE.search(line)
-    if m:
-        ctrl = float(m.group(4))
-        return StatusFrame(
-            use_pid=True,
-            target_rpm=float(m.group(1)),
-            real_rpm=float(m.group(2)),
-            measured_rpm=float(m.group(2)),
-            pi_error=float(m.group(3)),
-            control_rpm=ctrl,
-            angle_deg=float(m.group(5)),
-            dir=m.group(6),
-            running=m.group(7) == "CORRIENDO",
-            ts=time.time(),
-        )
-
-    m = _STATUS_LIBRE_RE.search(line)
-    if m:
-        return StatusFrame(
-            use_pid=False,
-            target_rpm=float(m.group(1)),
-            real_rpm=float(m.group(2)),
-            angle_deg=float(m.group(3)),
-            dir=m.group(4),
-            running=m.group(5) == "CORRIENDO",
-            ts=time.time(),
-        )
-
-    return None
+    m = _STATUS_RE.search(line)
+    if not m:
+        return None
+    return StatusFrame(
+        target_rpm=float(m.group(1)),
+        motor_rpm=float(m.group(2)),
+        enc_rpm=float(m.group(3)),
+        angle_deg=float(m.group(4)),
+        dir=m.group(5),
+        running=m.group(6) == "CORRIENDO",
+        ts=time.time(),
+    )
 
 
 def _enrich(frame: StatusFrame, params: Params) -> StatusFrame:
-    omega = frame.real_rpm * 2 * math.pi / 60
+    """Añade magnitudes derivadas de la velocidad **del motor**.
+
+    La rueda va en el eje del motor (el encoder es solo instrumento, y además
+    gira más rápido por los engranajes), así que la velocidad lineal se calcula
+    con la RPM del motor medida. ``slip_pct`` compara consigna y medida: si el
+    motor sigue el tren de pasos es ~0; si pierde pasos o se atasca, sube.
+    """
+    omega = frame.motor_rpm * 2 * math.pi / 60
     v = omega * (params.radius_cm / 100.0)
-    return frame.model_copy(update={"omega_rad_s": round(omega, 4), "v_m_s": round(v, 4)})
+    update = {"omega_rad_s": round(omega, 4), "v_m_s": round(v, 4)}
+    if frame.running and frame.target_rpm > 0:
+        slip = (1.0 - abs(frame.motor_rpm) / frame.target_rpm) * 100.0
+        update["slip_pct"] = round(max(0.0, min(100.0, slip)), 1)
+    return frame.model_copy(update=update)
 
 
 class SerialLink:
     def __init__(self) -> None:
         self._writer: Optional[asyncio.StreamWriter] = None
         self._connected = False
+        # True si el intento actual llegó a abrir el puerto (ver run()).
+        self._opened = False
         self._cmd_lock = asyncio.Lock()
         self._pending_target: Optional[float] = None
         self._debounce_task: Optional[asyncio.Task] = None
@@ -96,14 +82,63 @@ class SerialLink:
     # ── lifecycle ──────────────────────────────────────────────
 
     async def run(self) -> None:
+        """Mantiene la conexión serial, reintentando sin llenar el log.
+
+        Sin Arduino conectado esto reintentaba cada 2 s y emitía el mismo aviso
+        —con las 32 UART del sistema listadas— indefinidamente. Ahora:
+
+          · el aviso se emite **una vez por causa**: mientras el fallo no cambie
+            se repite solo a nivel DEBUG,
+          · la espera crece de `serial_reconnect_interval` hasta
+            `serial_reconnect_max` mientras la causa siga siendo la misma,
+          · una desconexión real (tras haber abierto el puerto) siempre se avisa
+            y reinicia la espera, para no tardar 30 s en reconectar,
+          · con `MOTORINADOR_PORT=off` no se intenta nada.
+
+        No se ata al estado de la interfaz a propósito: el backend puede tener
+        varios clientes y, si enchufas el Arduino mientras miras la pestaña de
+        análisis, debe conectarse igual.
+        """
+        if not settings.serial_enabled:
+            logger.info(
+                "Serial desactivado (MOTORINADOR_PORT=%r). Solo análisis offline; "
+                "los comandos del motor responderán 503.", settings.port,
+            )
+            return
+
+        delay = settings.serial_reconnect_interval
+        last_error: str | None = None
         while True:
+            self._opened = False
             try:
                 await self._connect_and_read()
+                # Cierre limpio tras haber estado conectado: reintento inmediato.
+                delay = settings.serial_reconnect_interval
+                last_error = None
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
-                logger.warning("Serial error: %s — retrying in %.1fs", exc, settings.serial_reconnect_interval)
                 self._connected = False
-                await motor_state.broadcast(WsError(msg=f"Serial port disconnected: {exc}"))
-                await asyncio.sleep(settings.serial_reconnect_interval)
+                message = str(exc)
+                # Novedad = causa distinta, o caída de una conexión que sí existía.
+                is_news = self._opened or message != last_error
+                if is_news:
+                    last_error = message
+                    logger.warning("Serial: %s", message)
+                    if not self._opened:
+                        logger.info(
+                            "Se reintentará en segundo plano (hasta cada %.0f s) y solo "
+                            "se volverá a avisar si cambia la causa.",
+                            settings.serial_reconnect_max,
+                        )
+                    await motor_state.broadcast(WsError(msg=f"Puerto serial no disponible: {message}"))
+                else:
+                    logger.debug("Serial sigue no disponible (reintento en %.0f s)", delay)
+
+                if self._opened:
+                    delay = settings.serial_reconnect_interval
+                await asyncio.sleep(delay)
+                delay = min(delay * 2.0, settings.serial_reconnect_max)
 
     def _resolve_port(self) -> Optional[str]:
         """Resuelve el puerto a usar: detección automática o puerto fijo."""
@@ -126,6 +161,7 @@ class SerialLink:
             url=port, baudrate=settings.baud
         )
         self._writer = writer
+        self._opened = True
         # Wait for Arduino reset after USB connect
         await asyncio.sleep(2.0)
         self._connected = True
@@ -149,7 +185,6 @@ class SerialLink:
         if frame:
             frame = _enrich(frame, motor_state.params)
             motor_state.last_status = frame
-            motor_state.use_pid = frame.use_pid
             await motor_state.broadcast(WsStatus(data=frame))
         else:
             level = "warn" if "error" in line.lower() else "info"
@@ -207,9 +242,6 @@ class SerialLink:
 
     async def cmd_set_direction(self, forward: bool) -> None:
         await self.send("f" if forward else "b")
-
-    async def cmd_set_mode(self, pid: bool) -> None:
-        await self.send("p" if pid else "l")
 
     async def cmd_zero_encoder(self) -> None:
         await self.send("z")

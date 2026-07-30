@@ -1,0 +1,12 @@
+# Dependencias del motor de cálculo del análisis offline.
+#
+# Están todas incluidas también en backend/requirements.txt, que es lo que instala
+# el lanzador (Motorinador.bat / motorinador.sh). Este archivo sirve para usar el
+# paquete `analysis/` por separado, como librería.
+#
+# Ya no aparecen matplotlib ni scipy: eran de la interfaz de escritorio, que se
+# retiró al pasar el análisis a la pestaña web (que dibuja en canvas).
+numpy>=1.26
+pandas>=2.0
+h5py>=3.10
+neo>=0.13          # lector del binario Intan .rhs (memmap, RAM plana)

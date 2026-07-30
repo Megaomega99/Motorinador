@@ -3,12 +3,23 @@
    Se comunica con el backend FastAPI vía WebSocket (/ws).
    Los límites de RPM (min/max/step) los dicta el backend en el
    mensaje 'params'; el HTML solo trae valores por defecto.
+
+   Control en lazo abierto: el usuario fija activado/velocidad/dirección y el
+   firmware convierte la consigna en tren de pasos. El encoder NO realimenta:
+   es el instrumento que verifica si el motor siguió la consigna.
+
+   Tres velocidades, no las mezcles:
+     · targetRPM  consigna del MOTOR
+     · motorRPM   motor MEDIDO (encoder ÷ relación de engranajes) → comparable
+     · encRPM     encoder en bruto (gira gearRatio veces más rápido)
    ============================================================= */
 
 /* ===== State ===== */
 const state = {
   targetRPM:   1,
-  realRPM:     0,
+  motorRPM:    0,      // motor medido (referido al eje del motor)
+  encRPM:      0,      // encoder en bruto
+  slipPct:     null,   // null = no definido (motor parado)
   dir:         1,
   running:     false,
   radiusCm:    12,
@@ -16,16 +27,15 @@ const state = {
   microsteps:  8,
   encPpr:      600,
   debounce:    50,
+  gearRatio:   1.986,
   angleDeg:    0,
   startedAt:   null,
   wsConnected: false,
   lastStatusTs: 0,     // llegada del último frame de estado (frescura del encoder)
-  // PI controller
-  usePid:     false,
-  measuredRpm: 0,
-  piError:     0,
-  controlRpm:  0,
 };
+
+/* Deslizamiento por encima del cual se avisa: el motor no sigue la consigna. */
+const SLIP_WARN_PCT = 10;
 
 /* ===== Log ===== */
 const logEl = document.getElementById('log');
@@ -59,7 +69,9 @@ function wsConnect() {
     state.wsConnected = false;
     ledPower.classList.remove('on');
     ledEnc.classList.remove('on');
-    state.realRPM = 0;
+    state.motorRPM = 0;
+    state.encRPM = 0;
+    state.slipPct = null;
     applyRunningState(false);
     document.getElementById('liveDot').textContent = 'DESCONECTADO';
     logRaw('<span class="err">WS</span> Backend desconectado — reintentando en 3 s...', 'err');
@@ -74,15 +86,11 @@ function wsConnect() {
     switch (m.type) {
       case 'status': {
         const d = m.data;
-        const prevPid = state.usePid;
-        state.usePid = !!d.use_pid;
-
         state.targetRPM = d.target_rpm;
-        if (d.measured_rpm != null) state.measuredRpm = d.measured_rpm;
-        if (d.pi_error     != null) state.piError     = d.pi_error;
-        if (d.control_rpm  != null) state.controlRpm  = d.control_rpm;
-        state.realRPM  = d.real_rpm;
-        state.angleDeg = d.angle_deg;
+        state.motorRPM  = d.motor_rpm;
+        state.encRPM    = d.enc_rpm;
+        state.slipPct   = d.slip_pct ?? null;
+        state.angleDeg  = d.angle_deg;
 
         const newDir = d.dir === 'FWD' ? 1 : -1;
         if (newDir !== state.dir) {
@@ -95,8 +103,6 @@ function wsConnect() {
         state.lastStatusTs = performance.now();
         ledEnc.classList.add('on');
         applyRunningState(d.running);
-
-        if (prevPid !== state.usePid) applyPidMode(state.usePid);
 
         syncSliderDisplay();
         updateGauges();
@@ -114,6 +120,7 @@ function wsConnect() {
         state.microsteps = p.microsteps;
         state.encPpr     = p.enc_ppr;
         state.debounce   = p.debounce_us;
+        if (p.gear_ratio != null) state.gearRatio = p.gear_ratio;
         // Los límites de RPM son propiedad del servidor: se aplican a los inputs.
         if (p.rpm_min  != null) { rpm.min  = p.rpm_min;  rpmNum.min  = p.rpm_min;  }
         if (p.rpm_max  != null) { rpm.max  = p.rpm_max;  rpmNum.max  = p.rpm_max;  }
@@ -139,42 +146,33 @@ function wsSend(payload) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
 }
 
-/* ===== PID mode switch ===== */
-function applyPidMode(pid) {
-  // Seg buttons
-  document.querySelectorAll('#modeSeg button').forEach(x => x.classList.remove('on'));
-  const btn = document.querySelector(`#modeSeg button[data-v="${pid ? 'pid' : 'libre'}"]`);
-  if (btn) btn.classList.add('on');
+/* ===== Seguimiento del motor =====
+   Compara la consigna con lo que mide el encoder (referido al eje del motor).
+   Un deslizamiento alto significa pasos perdidos o eje atascado. */
+function updateTracking() {
+  document.getElementById('trkTgt').textContent = fmt(state.targetRPM, 1);
+  document.getElementById('trkMot').textContent = fmt(state.motorRPM, 2);
+  document.getElementById('trkEnc').textContent = fmt(state.encRPM, 1);
 
-  // Show/hide control sections (slider visible in both modes; PI card only in PI mode)
-  document.getElementById('libreControls').style.display = '';
-  document.getElementById('pidControls').style.display   = pid ? '' : 'none';
+  const card    = document.getElementById('trackCard');
+  const slipEl  = document.getElementById('trkSlip');
+  const ledSlip = document.getElementById('ledSlip');
+  const slipTag = document.getElementById('ledSlipTag');
 
-  // LED badge
-  const ledPidEl = document.getElementById('ledPid');
-  const modeTag  = document.getElementById('ledModeTag');
-  if (pid) {
-    ledPidEl.className = 'led pid';
-    modeTag.textContent = 'PID';
-    modeTag.style.color = 'var(--pid)';
-    modeTag.style.fontWeight = '700';
-  } else {
-    ledPidEl.className = 'led warn';
-    modeTag.textContent = 'LIBRE';
-    modeTag.style.color = '';
-    modeTag.style.fontWeight = '';
+  // slip_pct llega null con el motor parado: ahí no está definido.
+  if (state.slipPct == null) {
+    slipEl.textContent = '—';
+    card.classList.remove('slipping');
+    ledSlip.className = 'led';
+    slipTag.textContent = 'PARADO';
+    return;
   }
 
-  // Stage title
-  const stageTitle = document.getElementById('stageTitle');
-  stageTitle.innerHTML = pid
-    ? 'El <em class="pid-em">PI</em> controla la velocidad'
-    : 'El <em>hámster</em> corre en su rueda';
-
-  // Gauge styles (solo el gauge objetivo cambia de acento; unidades fijas)
-  document.getElementById('g1').classList.toggle('pid-mode', pid);
-
-  updateGauges();
+  slipEl.textContent = fmt(state.slipPct, 1);
+  const bad = state.slipPct > SLIP_WARN_PCT;
+  card.classList.toggle('slipping', bad);
+  ledSlip.className = bad ? 'led warn on' : 'led on';
+  slipTag.textContent = bad ? 'PIERDE PASOS' : 'SIGUE';
 }
 
 /* ===== Param sync ===== */
@@ -184,6 +182,7 @@ function syncParamInputs() {
   document.getElementById('microsteps').value = state.microsteps;
   document.getElementById('encPpr').value     = state.encPpr;
   document.getElementById('debounce').value   = state.debounce;
+  document.getElementById('gearRatio').value  = state.gearRatio;
   syncSliderDisplay();
 }
 
@@ -206,6 +205,7 @@ function sendParams() {
       microsteps:    state.microsteps,
       enc_ppr:       state.encPpr,
       debounce_us:   state.debounce,
+      gear_ratio:    state.gearRatio,
     }
   });
 }
@@ -227,16 +227,6 @@ function sendTarget(value) {
 rpm.addEventListener('input', () => sendTarget(+rpm.value));
 rpmNum.addEventListener('change', () => sendTarget(Math.round(+rpmNum.value || +rpm.min)));
 syncSliderDisplay();
-
-/* Mode toggle — comandos absolutos e idempotentes */
-document.getElementById('modeSeg').addEventListener('click', e => {
-  const b = e.target.closest('button'); if (!b) return;
-  const wantPid = b.dataset.v === 'pid';
-  if (wantPid !== state.usePid) {
-    wsSend({ type: 'cmd', cmd: wantPid ? 'mode_pi' : 'mode_libre' });
-    logRaw(`<span class="pid">MODE</span> ${wantPid ? 'Activando PI (lazo cerrado)…' : 'Desactivando PI (lazo abierto)…'}`);
-  }
-});
 
 document.getElementById('dirSeg').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
@@ -264,6 +254,11 @@ document.getElementById('encPpr').addEventListener('input', e => {
 });
 document.getElementById('debounce').addEventListener('input', e => {
   state.debounce = Math.max(0, +e.target.value || 0); sendParams();
+});
+document.getElementById('gearRatio').addEventListener('input', e => {
+  // El backend rechaza <= 0 (dividiría por cero al referir el encoder al motor).
+  state.gearRatio = Math.max(0.1, +e.target.value || 1.986);
+  sendParams(); updateGauges();
 });
 
 /* command pills */
@@ -333,33 +328,30 @@ startBtn.addEventListener('click', () => {
 
 /* ===== Gauges & telemetry ===== */
 function updateTelemetry() {
+  // f_STEP se deriva de la CONSIGNA: es lo que el firmware genera realmente
+  // (lazo abierto). Con la medida daría un número que no existe en el driver.
   const spr   = state.stepsRev * state.microsteps;
-  const fStep = Math.abs(state.realRPM) * spr / 60;
+  const fStep = state.running ? state.targetRPM * spr / 60 : 0;
   const tHalf = fStep > 0.01 ? 0.5e6/fStep : 0;
   const perim = 2 * Math.PI * state.radiusCm;
   document.getElementById('tStepF').textContent = fStep.toFixed(0);
   document.getElementById('tHalf').textContent  = tHalf.toFixed(0);
   document.getElementById('tCpr').textContent   = state.encPpr * 4;
+  document.getElementById('tSpr').textContent    = spr;
   document.getElementById('tPerim').textContent = perim.toFixed(1);
 }
 
-/* Los tres gauges tienen significado fijo en ambos modos:
-   objetivo (RPM) · real medida por encoder (RPM) · lineal v=ωr (m/s).
-   La salida del PI se muestra en la tarjeta "Estado PI". */
+/* Los tres marcadores: consigna del motor · motor medido (encoder ÷ relación) ·
+   velocidad lineal v = ω r, calculada con la velocidad del motor porque la
+   rueda va en su eje (el encoder solo mide la transmisión). */
 function updateGauges() {
   document.getElementById('gTarget').textContent = fmt(state.targetRPM, 1);
-  document.getElementById('gReal').textContent   = fmt(state.realRPM, 1);
-  const omega = state.realRPM * 2 * Math.PI / 60;
+  document.getElementById('gReal').textContent   = fmt(state.motorRPM, 1);
+  const omega = state.motorRPM * 2 * Math.PI / 60;
   const v = omega * (state.radiusCm / 100);
   document.getElementById('gLin').textContent = fmt(v, 2);
-
-  if (state.usePid) {
-    document.getElementById('piTgtRpm').textContent = fmt(state.targetRPM, 1);
-    document.getElementById('piMeas').textContent   = fmt(state.measuredRpm, 1);
-    document.getElementById('piErr').textContent    = fmt(state.piError, 2);
-    document.getElementById('piCtrl').textContent   = fmt(state.controlRpm, 1);
-  }
   document.getElementById('gAng').textContent = fmt(state.angleDeg, 1) + '°';
+  updateTracking();
   updateTelemetry();
 }
 
@@ -381,11 +373,11 @@ let lastT = performance.now();
 function tick(now) {
   const dt = Math.min(0.1, (now - lastT)/1000); lastT = now;
 
-  const degPerSec = state.realRPM * 6;  // signo embebido en realRPM (+ FWD, − REV)
+  const degPerSec = state.motorRPM * 6;  // signo embebido en motorRPM (+ FWD, − REV)
   wheelAngle = (wheelAngle + degPerSec * dt) % 360;
   wheelEl.setAttribute('transform', `translate(260 180) rotate(${wheelAngle})`);
 
-  const cyc = (now/1000) * Math.max(2, Math.abs(state.realRPM)/8);
+  const cyc = (now/1000) * Math.max(2, Math.abs(state.motorRPM)/8);
   const sw  = Math.sin(cyc*Math.PI*2);
   const sw2 = Math.sin(cyc*Math.PI*2 + Math.PI);
   legBL.setAttribute('transform', `translate(0 ${sw>0?sw*4:0}) rotate(${sw*18} -12 5)`);
@@ -393,19 +385,19 @@ function tick(now) {
   legFL.setAttribute('transform', `translate(0 ${sw2>0?sw2*3:0}) rotate(${sw2*22} 18 5)`);
   legFR.setAttribute('transform', `translate(0 ${sw>0?sw*3:0}) rotate(${sw*22} 26 5)`);
 
-  const bob = Math.sin(cyc*Math.PI*4) * Math.min(2, Math.abs(state.realRPM)/40);
+  const bob = Math.sin(cyc*Math.PI*4) * Math.min(2, Math.abs(state.motorRPM)/40);
   document.getElementById('mouse').setAttribute('transform', `translate(260 ${295+bob})`);
 
-  const wag = Math.sin(now/180) * Math.min(20, Math.abs(state.realRPM)/3);
+  const wag = Math.sin(now/180) * Math.min(20, Math.abs(state.motorRPM)/3);
   tailEl.setAttribute('d', `M -34 4 q -22 ${-8-wag*0.3} -38 ${6+wag}`);
   headEl.setAttribute('transform', `translate(28 ${-6+bob*0.4}) rotate(${Math.sin(cyc*Math.PI*2)*4})`);
 
-  const speedAlpha = Math.min(1, Math.max(0, (Math.abs(state.realRPM)-25)/95));
+  const speedAlpha = Math.min(1, Math.max(0, (Math.abs(state.motorRPM)-25)/95));
   speedLines.setAttribute('opacity', speedAlpha.toFixed(2));
   if (speedAlpha > 0.05 && Math.random() < 0.35) {
     while (speedLines.children.length > 14) speedLines.removeChild(speedLines.firstChild);
     const y  = 250 + Math.random()*70;
-    const fwd = state.realRPM >= 0;   // signo embebido en realRPM
+    const fwd = state.motorRPM >= 0;   // signo embebido en motorRPM
     const xs = fwd ? 90+Math.random()*120 : 320+Math.random()*120;
     const xe = xs + (fwd ? -30-Math.random()*40 : 30+Math.random()*40);
     const ln = document.createElementNS('http://www.w3.org/2000/svg','line');
@@ -435,7 +427,10 @@ function tick(now) {
 requestAnimationFrame(tick);
 
 /* boot */
-logRaw('===  NEMA17 + TMC2208 + ENCODER + PI  ===','ok');
+logRaw('===  NEMA17 + TMC2208 + ENCODER (lazo abierto)  ===','ok');
 logRaw(`Conectando a <span class="v">${WS_URL}</span>…`);
-logRaw('Modos: <span class="v">LIBRE</span> (velocidad) · <span class="pid">PI</span> (velocidad lazo cerrado)');
+logRaw('Control: <span class="v">activado</span> · <span class="v">velocidad</span> · <span class="v">dirección</span>');
+logRaw('El encoder verifica el seguimiento; no cierra ningún lazo.');
+syncParamInputs();
+updateGauges();
 wsConnect();
