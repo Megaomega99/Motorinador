@@ -43,19 +43,31 @@ if ! "$PY" -c 'import sys;sys.exit(0 if sys.version_info >= (3,10) else 1)' 2>/d
     exit 1
 fi
 
-# ── 2. Dependencias (solo si falta alguna) ──────────────────────────────────
+# ── 2. Dependencias ─────────────────────────────────────────────────────────
+# Aquí NO se instala nada: en Ubuntu 23.04+ el Python del sistema está marcado
+# como "externally managed" (PEP 668) y rechaza `pip install`, así que intentarlo
+# solo daría un error confuso. Se comprueba y, si falta algo, se dice exactamente
+# qué ejecutar. Ver la sección de Linux en el README.
 if ! "$PY" -c "import fastapi, uvicorn, serial, numpy, pandas, h5py, neo" >/dev/null 2>&1; then
-    echo "  Faltan dependencias. Instalando (solo la primera vez)..."
-    if ! "$PY" -m pip install -r backend/requirements.txt; then
-        echo
-        echo "  [ERROR] La instalación de dependencias falló."
-        read -rp "  Pulsa Intro para salir..." _
-        exit 1
-    fi
-    echo "  Dependencias instaladas."
-else
-    echo "  Dependencias correctas."
+    echo
+    echo "  [!] Faltan dependencias de Python."
+    echo
+    echo "  Instálalas en un entorno aislado (una sola vez):"
+    echo
+    echo "      python3 -m venv .venv"
+    echo "      .venv/bin/pip install -r backend/requirements.txt"
+    echo
+    echo "  y después lanza el programa con ese entorno:"
+    echo
+    echo "      .venv/bin/python backend/main.py"
+    echo
+    echo "  Si 'python3 -m venv' falla:  sudo apt install python3-venv python3-pip"
+    echo
+    echo "  (Con conda/miniforge basta:  pip install -r backend/requirements.txt)"
+    echo
+    exit 1
 fi
+echo "  Dependencias correctas."
 
 # ── 3. Abrir el navegador cuando el servidor ya responda ────────────────────
 URL="http://127.0.0.1:8000"

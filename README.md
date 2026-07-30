@@ -186,20 +186,51 @@ Encoder (color)      Arduino / Circuito
 
 **No hay que instalar nada a mano ni abrir una terminal.**
 
-| Sistema | Qué hacer |
-|---|---|
-| **Windows** | Doble clic en **`Motorinador.bat`** |
-| **Linux / macOS** | Doble clic en **`motorinador.sh`** (o `./motorinador.sh` en una terminal) |
+### Windows
 
-El lanzador busca Python, instala las dependencias **la primera vez** (tarda un par
-de minutos y necesita internet), arranca el programa y abre el navegador en
+**Doble clic en `Motorinador.bat`.** Nada más.
+
+Busca Python, instala las dependencias **la primera vez** (tarda un par de minutos
+y necesita internet), arranca el programa y abre el navegador en
 `http://127.0.0.1:8000`.
-
-Deja esa ventana abierta mientras uses el programa: **cerrarla lo detiene**.
 
 > Lo único que necesitas tener instalado es **Python 3.10 o superior**. Si no lo
 > tienes, el lanzador te lo dirá con el enlace de descarga; al instalarlo marca la
 > casilla *«Add python.exe to PATH»*.
+
+### Linux / macOS
+
+Desde una terminal, en la carpeta del proyecto:
+
+```bash
+./motorinador.sh
+```
+
+**Instalación de dependencias, una sola vez.** En Ubuntu 23.04 y posteriores el
+Python del sistema está marcado como *externally managed* (PEP 668) y **rechaza
+`pip install`**, así que hay que usar un entorno aislado:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r backend/requirements.txt
+```
+
+Y a partir de ahí se lanza con ese entorno:
+
+```bash
+.venv/bin/python backend/main.py
+```
+
+> Si `python3 -m venv` falla: `sudo apt install python3-venv python3-pip`.
+> Con **conda/miniforge** no hace falta entorno aparte:
+> `pip install -r backend/requirements.txt` y luego `./motorinador.sh`.
+
+### Cómo se cierra
+
+**Ctrl+C** en la terminal, o cerrar la ventana del lanzador.
+
+> Cerrar el navegador **no** detiene el programa: solo cierra la vista. El
+> servidor sigue en la terminal hasta que lo pares ahí.
 
 > **Sin Arduino conectado el programa funciona igual** para analizar grabaciones:
 > la pestaña «Análisis de grabaciones» no necesita hardware.
