@@ -2,9 +2,9 @@
 .pio/
 build/
 
-# VS Code (auto-generados por PlatformIO — contienen rutas absolutas locales)
-.vscode/c_cpp_properties.json
-.vscode/launch.json
+# VS Code / Claude Code (config local del editor, no del proyecto)
+.vscode/
+.claude/
 
 # Python
 __pycache__/

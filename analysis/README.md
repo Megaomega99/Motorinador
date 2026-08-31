@@ -3,10 +3,10 @@
 Este paquete es el **motor de cálculo** del análisis offline de las grabaciones de
 banco. No tiene interfaz propia: se usa desde la pestaña **«Análisis de
 grabaciones»** de la aplicación, que habla con `/api/analysis/*`. Esa API solo
-envuelve este paquete —no recalcula nada— y sirve las series ya decimadas; hay un
-test que comprueba que el resultado por API y el cálculo directo coinciden.
+envuelve este paquete —no recalcula nada— y sirve las series ya decimadas: el
+resultado por API y el cálculo directo coinciden.
 
-También se puede usar como librería desde Python, que es lo que hacen los tests:
+También se puede usar como librería desde Python:
 
 ```python
 from analysis.readers.factory import open_reader
@@ -145,8 +145,8 @@ volver a la grabación original:
 
 Las ventanas están porque hicieron falta: sin ellas, dos exportaciones del mismo
 tramo con distinto suavizado son indistinguibles, y recuperarlas obliga a
-compararlas por fuerza bruta contra la grabación original. Hay un test que
-comprueba que `omega_*` se puede recalcular leyendo la ventana del propio archivo.
+compararlas por fuerza bruta contra la grabación original. `omega_*` se puede
+recalcular leyendo la ventana del propio archivo.
 
 > El export **tabular** (CSV/TXT) no tiene dónde guardar esto: su formato es la
 > cabecera de Intan (nombres + unidades) y añadir líneas rompería a quien lo lea.
@@ -206,16 +206,3 @@ O(n) en lugar de O(n·w). Con la ventana de motor de 500 ms sobre un tramo de 20
 zoom y arrastre. Una petición de ventana completa (cuatro gráficas + estadísticos)
 tarda **22–52 ms** sobre la sesión de 437 s.
 
-## Tests
-
-```bash
-pytest analysis/tests/ --cov=analysis     # motor de cálculo
-cd backend && pytest tests                # API + contratos entre capas
-node --test frontend/tests/chart.test.js  # graficador de canvas
-```
-
-No hacen falta las grabaciones reales: los tests generan trenes STEP y cuadratura
-sintéticos con la misma geometría. Entre ellos hay dos que importan especialmente:
-uno comprueba que **la API y el cálculo directo dan el mismo resultado**, y otro
-que un `.h5` exportado permite **recalcular sus propias columnas** leyendo las
-ventanas de sus metadatos.

@@ -23,9 +23,7 @@ siguió la consigna y delata pasos perdidos o atascos.
 > Hubo un controlador PI (diseño IMC) sobre la velocidad del encoder. **Se
 > retiró** al montar los engranajes: la consigna pasaba a significar dos cosas
 > distintas según el modo y, ante un atasco, el integrador saturaba y el firmware
-> acababa comandando el máximo a un motor bloqueado. El razonamiento completo, con
-> las medidas, está en
-> [docs/superpowers/specs/2026-07-29-motor-signal-y-retirada-del-PI-design.md](docs/superpowers/specs/2026-07-29-motor-signal-y-retirada-del-PI-design.md).
+> acababa comandando el máximo a un motor bloqueado.
 
 El **análisis offline** de las grabaciones (electrodos + encoder + señal del motor)
 está en la **misma interfaz**, en la pestaña «Análisis de grabaciones»: abre un
